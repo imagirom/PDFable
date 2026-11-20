@@ -26,6 +26,8 @@ BUILD="${PDFABLE_BUILD:-$HOME/.cache/pdfable/build-linux}"
 QT_DIR="${QT_DIR:-$DEPS/qt/$QT_VERSION/gcc_64}"
 MUPDF_DIR="$DEPS/mupdf-$MUPDF_VERSION"
 JOBS="${JOBS:-$(nproc)}"
+LOGS="$ROOT/logs"      # inside the project folder so the logs can be read from Windows too
+mkdir -p "$LOGS"
 
 say() { printf '\033[1;31m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -76,12 +78,13 @@ setup_mupdf() {
     fi
     say "Building MuPDF $MUPDF_VERSION (a few minutes, once)"
     make -C "$src" -j"$JOBS" build=release HAVE_X11=no HAVE_GLUT=no HAVE_CURL=no XCFLAGS=-fPIC \
-        prefix="$MUPDF_DIR" install-libs >"$DEPS/src/mupdf-build.log" 2>&1 \
-        || { tail -30 "$DEPS/src/mupdf-build.log"; die "MuPDF build failed, log: $DEPS/src/mupdf-build.log"; }
+        prefix="$MUPDF_DIR" install-libs >"$LOGS/mupdf-build.log" 2>&1 \
+        || { tail -30 "$LOGS/mupdf-build.log"; die "MuPDF build failed, log: logs/mupdf-build.log"; }
 }
 
 cmd_setup() {
     mkdir -p "$DEPS"
+    exec > >(tee "$LOGS/setup.log") 2>&1
     if command -v apt-get >/dev/null; then setup_packages; else say "No apt-get: install a C++ compiler, CMake, Ninja, git and Python 3 yourself"; fi
     if [[ "$QT_DIR" == "$DEPS/qt/"* ]]; then setup_qt; else say "Using Qt from QT_DIR=$QT_DIR"; fi
     setup_mupdf
@@ -97,9 +100,11 @@ need_deps() {
 cmd_build() {
     need_deps
     say "Building Linux version in $BUILD"
-    cmake -S "$ROOT" -B "$BUILD" -G Ninja -DCMAKE_BUILD_TYPE="${BUILD_TYPE:-Release}" \
-        -DCMAKE_PREFIX_PATH="$QT_DIR" -DMUPDF_ROOT="$MUPDF_DIR" -DPDFABLE_TESTS=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON >/dev/null
-    cmake --build "$BUILD" -j"$JOBS"
+    {
+        cmake -S "$ROOT" -B "$BUILD" -G Ninja -DCMAKE_BUILD_TYPE="${BUILD_TYPE:-Release}" \
+            -DCMAKE_PREFIX_PATH="$QT_DIR" -DMUPDF_ROOT="$MUPDF_DIR" -DPDFABLE_TESTS=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        cmake --build "$BUILD" -j"$JOBS"
+    } > >(tee "$LOGS/linux-build.log") 2>&1
 }
 
 qt_env() {
@@ -113,7 +118,7 @@ cmd_test() {
     local out="$BUILD/test-out"
     rm -rf "$out"
     say "Running the self-test (screenshots in $out)"
-    QT_QPA_PLATFORM=offscreen "$BUILD/pdfable_tests" "$ROOT/tests/sample.pdf" "$out"
+    QT_QPA_PLATFORM=offscreen "$BUILD/pdfable_tests" "$ROOT/tests/sample.pdf" "$out" 2>&1 | tee "$LOGS/test.log"
 }
 
 cmd_run() {
@@ -155,8 +160,8 @@ cmd_appimage() {
         "$DEPS/tools/linuxdeploy-x86_64.AppImage" --appdir "$appdir" \
             --desktop-file "$appdir/usr/share/applications/pdfable.desktop" \
             --icon-file "$appdir/usr/share/icons/hicolor/256x256/apps/pdfable.png" \
-            --plugin qt --output appimage >"$BUILD/appimage.log" 2>&1 \
-            || { tail -30 "$BUILD/appimage.log"; die "AppImage packaging failed, log: $BUILD/appimage.log"; }
+            --plugin qt --output appimage >"$LOGS/appimage.log" 2>&1 \
+            || { tail -30 "$LOGS/appimage.log"; die "AppImage packaging failed, log: logs/appimage.log"; }
         mv -f "PDFable-$ver-x86_64.AppImage" "$ROOT/dist/"
     )
     say "Done: dist/PDFable-$ver-x86_64.AppImage"

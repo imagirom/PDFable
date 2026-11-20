@@ -4,6 +4,7 @@
 /dist/
 /deps/
 /AppDir/
+/logs/
 # logs
 build_log.txt
 aqtinstall.log

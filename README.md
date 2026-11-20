@@ -32,6 +32,9 @@ A PDF reader and annotator for Windows pen devices, written in C++17 with Qt 6 W
   with one click; text boxes typed directly on the page (double-click to edit, drag a corner to change the
   font size); images. The Select tool
   moves and resizes ink, text boxes and images; Del removes them. Undo/redo for everything.
+- **PDF forms**: fillable fields are tinted blue. Click a text field and type on the page (Tab / Shift+Tab
+  jump between fields, Enter or a click elsewhere confirms, Esc cancels); checkboxes and radio buttons toggle
+  on click; dropdowns and list boxes open a menu. Works with the Select and Hand tools.
 - **Handwritten signatures**: draw once, keep in a library, place and resize on any page (Sign menu).
 - **Page editing**: drag thumbnails to reorder; rotate, delete, extract, insert pages from another PDF, insert
   blank pages, merge files, save an optimised (smaller) copy.

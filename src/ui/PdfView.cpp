@@ -11,7 +11,10 @@
 #include <QNativeGestureEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QLineEdit>
 #include <QPlainTextEdit>
+#include <QPointer>
+#include "Theme.h"
 #include <QVBoxLayout>
 #include <QScreen>
 #include <QScrollBar>
@@ -279,6 +282,7 @@ void PdfView::setZoom(double z, QPointF anchor)
     z = qBound(0.1, z, 8.0);
     if (qFuzzyCompare(z, zoom_) || pageRects_.isEmpty()) return;
     commitTextEdit();
+    commitFieldEdit();
     hideSelBar();
     if (anchor.x() < 0) anchor = QPointF(viewport()->width() / 2.0, viewport()->height() / 2.0);
     int pg = pageAt(anchor, true);
@@ -321,6 +325,7 @@ void PdfView::resizeEvent(QResizeEvent *e)
 void PdfView::scrollContentsBy(int, int)
 {
     if (textEdit_) layoutTextEdit();
+    if (fieldEdit_) layoutFieldEdit();
     hideSelBar();
     settleTimer_.start();
     rebuildOverlay();
@@ -392,14 +397,17 @@ void PdfView::onRendered(const RenderJob &job, const QImage &img)
 void PdfView::onPageChanged(int)
 {
     linkCache_.clear();
+    fieldCache_.clear();
     viewport()->update();
 }
 
 void PdfView::onStructureChanged()
 {
+    cancelFieldEdit();
     tiles_.clear();
     requested_.clear();
     linkCache_.clear();
+    fieldCache_.clear();
     hits_.clear();
     searchTotal_ = 0;
     selPage_ = -1;
@@ -504,6 +512,11 @@ void PdfView::paintEvent(QPaintEvent *e)
                 p.setBrush(cur ? QColor(255, 120, 0, 130) : QColor(255, 210, 0, 90));
                 p.drawPolygon(h->at(k));
             }
+        // fillable form fields get a light tint, like "highlight fields" in Acrobat
+        for (const FieldInfo &f : fieldsFor(i))
+            if (!f.readonly && f.kind != FieldKind::Button && f.kind != FieldKind::Signature && f.kind != FieldKind::Other &&
+                !(fieldEdit_ && i == fieldPage_ && f.id == fieldId_))
+                p.fillRect(f.rect, QColor(40, 120, 230, 30));
         if (i == selPage_) {
             p.setBrush(QColor(0, 110, 230, 80));
             for (const QPolygonF &q : std::as_const(selQuads_)) p.drawPolygon(q);
@@ -838,6 +851,7 @@ void PdfView::press(const Ptr &e)
         commitTextEdit();
         return;
     }
+    commitFieldEdit();
     hidePreview();
     hideSelBar();
     previewTimer_.stop();
@@ -851,6 +865,15 @@ void PdfView::press(const Ptr &e)
     emit deviceUsed(e.pen);
     pressPos_ = lastPos_ = e.pos;
     int pg = pageAt(e.pos);
+    // form fields react to the select and hand tools (and to the pen when it has one of them)
+    if (e.button == Qt::LeftButton && pg >= 0 && !placing_ && !rectCb_ && !e.eraser &&
+        (tool_ == Tool::Select || tool_ == Tool::Hand)) {
+        if (const FieldInfo *f = fieldAt(pg, toPage(pg, e.pos))) {
+            FieldInfo copy = *f;
+            activateField(pg, copy);
+            return;
+        }
+    }
     if (e.button == Qt::MiddleButton || (tool_ == Tool::Hand && !e.eraser && !placing_ && !rectCb_)) {
         drag_ = Drag::Pan;
         panScroll_ = QPoint(horizontalScrollBar()->value(), verticalScrollBar()->value());
@@ -1051,6 +1074,15 @@ void PdfView::hover(QPointF pos, bool pen)
         return;
     }
     Tool ht = pen ? toolPen_ : toolMouse_;
+    if ((ht == Tool::Select || ht == Tool::Hand) && !rectCb_) {
+        int fp = pageAt(pos);
+        if (const FieldInfo *f = fp >= 0 ? fieldAt(fp, toPage(fp, pos)) : nullptr) {
+            viewport()->setCursor(f->kind == FieldKind::Text ? Qt::IBeamCursor : Qt::PointingHandCursor);
+            if (!f->value.isEmpty() && (f->kind == FieldKind::List || f->kind == FieldKind::Combo)) viewport()->setToolTip(f->value);
+            return;
+        }
+        viewport()->setToolTip(QString());
+    }
     if (ht != Tool::Select || rectCb_) {
         updateCursor(rectCb_ ? Tool::Pen : ht);
         return;
@@ -1172,6 +1204,7 @@ void PdfView::tryCommit(bool block)
 void PdfView::flushInk()
 {
     commitTextEdit();
+    commitFieldEdit();
     if (drag_ == Drag::Draw) endStroke();
     tryCommit(true);
 }
@@ -1442,8 +1475,168 @@ void PdfView::commitTextEdit()
     viewport()->update();
 }
 
+// ------------------------------------------------------------------ form fields
+const QVector<FieldInfo> &PdfView::fieldsFor(int page)
+{
+    auto it = fieldCache_.find(page);
+    if (it == fieldCache_.end()) it = fieldCache_.insert(page, doc_->fields(page));
+    return it.value();
+}
+
+const FieldInfo *PdfView::fieldAt(int page, QPointF pt)
+{
+    for (const FieldInfo &f : fieldsFor(page))
+        if (f.rect.contains(pt) && !f.readonly && f.kind != FieldKind::Button && f.kind != FieldKind::Signature && f.kind != FieldKind::Other)
+            return &f;
+    return nullptr;
+}
+
+void PdfView::activateField(int page, const FieldInfo &f)
+{
+    try {
+        switch (f.kind) {
+        case FieldKind::Text: beginFieldEdit(page, f); break;
+        case FieldKind::CheckBox:
+        case FieldKind::Radio:
+            flushInk();
+            doc_->toggleField(page, f.id);
+            break;
+        case FieldKind::Combo:
+        case FieldKind::List: {
+            QMenu m(this);
+            for (const QString &o : f.options) {
+                QAction *a = m.addAction(o);
+                a->setCheckable(true);
+                a->setChecked(o == f.value);
+            }
+            QRectF vr = toView(page, f.rect);
+            QAction *chosen = m.exec(viewport()->mapToGlobal(QPoint(int(vr.left()), int(vr.bottom()) + 2)));
+            if (chosen && chosen->text() != f.value) {
+                flushInk();
+                doc_->setFieldChoice(page, f.id, chosen->text());
+            }
+            break;
+        }
+        default: break;
+        }
+    } catch (const PdfError &err) { emit statusMessage(err.message()); }
+    viewport()->update();
+}
+
+void PdfView::beginFieldEdit(int page, const FieldInfo &f)
+{
+    cancelFieldEdit();
+    fieldPage_ = page;
+    fieldId_ = f.id;
+    fieldRect_ = f.rect;
+    fieldOld_ = f.value;
+    float size = f.fontSize > 0 ? f.fontSize : float(qBound(6.0, f.rect.height() * 0.62, 14.0));
+    QFont font("Helvetica");
+    font.setStyleHint(QFont::SansSerif);
+    font.setPixelSize(qMax(5, int(std::round(size * ppp()))));
+    const QString css = QString("border:2px solid %1;border-radius:2px;background:white;color:black;padding:0 1px;").arg(Theme::accent().name());
+    if (f.multiline) {
+        auto *ed = new QPlainTextEdit(viewport());
+        ed->setPlainText(f.value);
+        ed->setStyleSheet("QPlainTextEdit{" + css + "}");
+        ed->document()->setDocumentMargin(1);
+        ed->moveCursor(QTextCursor::End);
+        fieldEdit_ = ed;
+    } else {
+        auto *ed = new QLineEdit(viewport());
+        ed->setText(f.value);
+        if (f.maxLen > 0) ed->setMaxLength(f.maxLen);
+        ed->setStyleSheet("QLineEdit{" + css + "}");
+        ed->selectAll();
+        fieldEdit_ = ed;
+    }
+    fieldEdit_->setFont(font);
+    fieldEdit_->installEventFilter(this);
+    layoutFieldEdit();
+    fieldEdit_->show();
+    fieldEdit_->setFocus();
+    viewport()->update();
+}
+
+void PdfView::layoutFieldEdit()
+{
+    if (!fieldEdit_ || fieldPage_ < 0 || fieldPage_ >= pageRects_.size()) return;
+    fieldEdit_->setGeometry(toView(fieldPage_, fieldRect_).toAlignedRect().adjusted(-2, -2, 2, 2));
+}
+
+void PdfView::cancelFieldEdit()
+{
+    if (!fieldEdit_) return;
+    QWidget *ed = fieldEdit_;
+    fieldEdit_ = nullptr;
+    ed->removeEventFilter(this);
+    ed->hide();
+    ed->deleteLater();
+    viewport()->update();
+}
+
+void PdfView::commitFieldEdit()
+{
+    if (!fieldEdit_) return;
+    QWidget *ed = fieldEdit_;
+    QString text = qobject_cast<QLineEdit *>(ed) ? static_cast<QLineEdit *>(ed)->text() : static_cast<QPlainTextEdit *>(ed)->toPlainText();
+    int page = fieldPage_, id = fieldId_;
+    cancelFieldEdit();
+    setFocus();
+    if (text == fieldOld_) return;
+    try {
+        flushInk();
+        doc_->setFieldText(page, id, text);
+    } catch (const PdfError &err) { emit statusMessage(err.message()); }
+}
+
+// Tab / Shift+Tab: next text field in reading order (page, then top to bottom, left to right)
+void PdfView::focusNextField(int step)
+{
+    int page = fieldPage_;
+    QRectF from = fieldRect_;
+    commitFieldEdit();
+    struct Cand { int page; FieldInfo f; };
+    QVector<Cand> all;
+    for (int p = 0; p < pageRects_.size(); ++p)
+        for (const FieldInfo &f : fieldsFor(p))
+            if (f.kind == FieldKind::Text && !f.readonly) all.push_back({p, f});
+    if (all.isEmpty()) return;
+    auto before = [](const Cand &a, int p, const QRectF &r) {
+        if (a.page != p) return a.page < p;
+        if (std::fabs(a.f.rect.top() - r.top()) > 4) return a.f.rect.top() < r.top();
+        return a.f.rect.left() < r.left() - 1;
+    };
+    std::sort(all.begin(), all.end(), [&](const Cand &a, const Cand &b) { return before(a, b.page, b.f.rect); });
+    int cur = -1;
+    for (int i = 0; i < all.size(); ++i)
+        if (all[i].page == page && all[i].f.rect == from) cur = i;
+    int next = cur < 0 ? 0 : (cur + step + all.size()) % all.size();
+    const Cand &c = all[next];
+    QRectF vr = toView(c.page, c.f.rect);
+    if (vr.top() < 0 || vr.bottom() > viewport()->height()) gotoPage(c.page, qMax(0.0, c.f.rect.top() - 60), false);
+    beginFieldEdit(c.page, c.f);
+}
+
 bool PdfView::eventFilter(QObject *o, QEvent *e)
 {
+    if (o == fieldEdit_ && fieldEdit_) {
+        if (e->type() == QEvent::KeyPress) {
+            auto *ke = static_cast<QKeyEvent *>(e);
+            if (ke->key() == Qt::Key_Escape) { cancelFieldEdit(); setFocus(); return true; }
+            if (ke->key() == Qt::Key_Tab) { focusNextField(1); return true; }
+            if (ke->key() == Qt::Key_Backtab) { focusNextField(-1); return true; }
+            if ((ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter) && qobject_cast<QLineEdit *>(fieldEdit_)) {
+                commitFieldEdit();
+                return true;
+            }
+        }
+        if (e->type() == QEvent::FocusOut && static_cast<QFocusEvent *>(e)->reason() != Qt::PopupFocusReason &&
+            static_cast<QFocusEvent *>(e)->reason() != Qt::TabFocusReason && static_cast<QFocusEvent *>(e)->reason() != Qt::BacktabFocusReason) {
+            QPointer<QWidget> guard = fieldEdit_;
+            QTimer::singleShot(0, this, [this, guard] { if (guard && guard == fieldEdit_) commitFieldEdit(); });
+        }
+    }
     if (o == textEdit_ && textEdit_) {
         if (e->type() == QEvent::KeyPress && static_cast<QKeyEvent *>(e)->key() == Qt::Key_Escape) {
             cancelTextEdit();

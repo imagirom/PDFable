@@ -51,6 +51,9 @@ public:
     PenStyle highlighterStyle() const { return hl_; }
     void setTextSize(float pt) { textSize_ = pt; }
     bool isEditingText() const { return textEdit_ != nullptr; }
+    bool isEditingField() const { return fieldEdit_ != nullptr; }
+    QPointF pageToView(int page, QPointF pt) const { return pageViewRect(page).topLeft() + pt * ppp(); }   // viewport coordinates
+    QWidget *fieldEditor() const { return fieldEdit_; }
     void commitTextEdit();
 
     double zoom() const { return zoom_; }
@@ -253,6 +256,23 @@ private:
 
     // in-place text box editor
     QPlainTextEdit *textEdit_ = nullptr;
+
+    // form fields
+    QHash<int, QVector<ink::FieldInfo>> fieldCache_;
+    QWidget *fieldEdit_ = nullptr;
+    int fieldPage_ = -1, fieldId_ = 0;
+    QRectF fieldRect_;
+    QString fieldOld_;
+    const QVector<ink::FieldInfo> &fieldsFor(int page);
+    const ink::FieldInfo *fieldAt(int page, QPointF pt);
+    void activateField(int page, const ink::FieldInfo &f);
+    void beginFieldEdit(int page, const ink::FieldInfo &f);
+    void layoutFieldEdit();
+    void cancelFieldEdit();
+    void focusNextField(int step);
+public:
+    void commitFieldEdit();
+private:
     int textPage_ = -1, textId_ = 0;
     QPointF textAt_, textDelta_;
     float textSize_ = 12, textEditSize_ = 12;

@@ -12,7 +12,10 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QMouseEvent>
+#include <QFileInfo>
 #include <QFrame>
+#include <QKeyEvent>
+#include <QLineEdit>
 #include <QTabWidget>
 #include <QToolButton>
 #include <QTimer>
@@ -418,6 +421,45 @@ int main(int argc, char **argv)
     wait(100);
     std::printf("     tabs=%d windows=%d\n", w->tabCount(), int(MainWindow::windows().size()));
     CHECK(w->tabCount() == 2 && MainWindow::windows().size() == 1);
+
+    // fillable forms: type in place, Tab to the next field, checkbox, saved values
+    {
+        QFile::remove(out + "/form.pdf");
+        QFile::copy(QFileInfo(sample).absolutePath() + "/form.pdf", out + "/form.pdf");
+        CHECK(w->openFile(out + "/form.pdf"));
+        wait(300);
+        PdfView *fv = w->currentTab()->view();
+        Document *fd = w->currentTab()->doc();
+        fv->setTools(Tool::Select, Tool::Select);
+        QVector<FieldInfo> fs = fd->fields(0);
+        CHECK(fs.size() == 9);
+        auto centre = [&](int i) { return fv->pageToView(0, fs[i].rect.center()); };
+        fv->testPointer(0, centre(0), -1, 20000);
+        fv->testPointer(2, centre(0), -1, 20010);
+        auto *le = qobject_cast<QLineEdit *>(fv->fieldEditor());
+        CHECK(le != nullptr);
+        if (le) {
+            le->setText("Tobias Rieger");
+            QKeyEvent tab(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+            QApplication::sendEvent(le, &tab);                      // commits and moves to the e-mail field
+        }
+        auto *le2 = qobject_cast<QLineEdit *>(fv->fieldEditor());
+        CHECK(le2 && le2 != le && le2->maxLength() == 40);
+        if (le2) le2->setText("tobias@example.org");
+        wait(50);
+        fv->viewport()->grab().save(out + "/9a_form_editing.png");
+        fv->commitFieldEdit();
+        fv->testPointer(0, centre(3), -1, 20100);                    // checkbox
+        fv->testPointer(2, centre(3), -1, 20110);
+        fs = fd->fields(0);
+        CHECK(fs[0].value == "Tobias Rieger" && fs[1].value == "tobias@example.org" && fs[3].checked);
+        CHECK(w->currentTab()->save());
+        Document again;
+        again.open(out + "/form.pdf");
+        CHECK(again.fields(0)[0].value == "Tobias Rieger" && again.fields(0)[3].checked);
+        wait(400);
+        fv->viewport()->grab().save(out + "/9b_form_filled.png");
+    }
 
 #ifdef PDFABLE_SIGNING
     {

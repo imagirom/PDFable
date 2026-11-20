@@ -88,6 +88,14 @@ int main(int argc, char **argv)
     wait(500);
     w->grab().save(out + "/1_open.png");
 
+    // dark interface (Ctrl+Alt+D) switches palette and icons, and back
+    MainWindow::setInterfaceMode(Theme::Mode::Dark);
+    wait(200);
+    CHECK(Theme::isDark() && qApp->palette().color(QPalette::Window).lightness() < 60);
+    w->grab().save(out + "/1b_dark_interface.png");
+    MainWindow::setInterfaceMode(Theme::Mode::Light);
+    CHECK(!Theme::isDark() && qApp->palette().color(QPalette::Window).lightness() > 200);
+
     // pen stroke with pressure, then hold to straighten a second one
     w->setTool(Tool::Pen);
     QPointF o(300, 300);

@@ -4,28 +4,51 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
+#include <QSettings>
 #include <QStyleFactory>
 #include <QStyleHints>
 
 namespace Theme {
 
 static bool g_dark = false;
+static Mode g_mode = Mode::System;
 
 bool isDark() { return g_dark; }
+Mode mode() { return g_mode; }
+
+static bool systemDark()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    return QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+#else
+    return false;
+#endif
+}
+
+static void applyColors(QApplication &app);
+
+void setMode(Mode m)
+{
+    g_mode = m;
+    QSettings().setValue("ui/theme", int(m));
+    g_dark = m == Mode::Dark || (m == Mode::System && systemDark());
+    applyColors(*qApp);
+}
 QColor accent() { return g_dark ? QColor(0xe2, 0x5d, 0x70) : QColor(0x8c, 0x16, 0x26); }   // deep red
 
 void apply(QApplication &app)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
-    g_dark = QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
-#else
-    g_dark = app.palette().color(QPalette::Window).lightness() < 128;
-#endif
+    g_mode = Mode(qBound(0, QSettings().value("ui/theme", 0).toInt(), 2));
+    g_dark = g_mode == Mode::Dark || (g_mode == Mode::System && systemDark());
     app.setStyle(QStyleFactory::create("Fusion"));
     QFont f = app.font();
     if (f.pointSizeF() > 0 && f.pointSizeF() < 9.5) f.setPointSizeF(9.5);
     app.setFont(f);
+    applyColors(app);
+}
 
+static void applyColors(QApplication &app)
+{
     const QColor window = g_dark ? QColor(0x1f, 0x22, 0x26) : QColor(0xf6, 0xf7, 0xf9);
     const QColor base = g_dark ? QColor(0x27, 0x2a, 0x2f) : QColor(0xff, 0xff, 0xff);
     const QColor text = g_dark ? QColor(0xe6, 0xe8, 0xeb) : QColor(0x1f, 0x23, 0x28);

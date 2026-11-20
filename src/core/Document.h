@@ -65,9 +65,34 @@ struct AnnotInfo {
     int id = 0;
     AnnotKind kind = AnnotKind::Other;
     QRectF rect;
-    QString text;        // FreeText only
+    QString text;        // FreeText: its text; markups: the attached note
     float fontSize = 0;  // FreeText only
-    QColor color;        // FreeText only
+    QColor color;        // FreeText: text colour; markups: highlight colour
+    QVector<QPolygonF> quads;   // markups (highlight, underline, strike-out)
+};
+
+// A text marking (highlight, underline, strike-out) and the note attached to it.
+struct MarkupNote {
+    int page = 0;
+    int id = 0;
+    AnnotKind kind = AnnotKind::Highlight;
+    QRectF rect;
+    QVector<QPolygonF> quads;
+    QColor color;
+    QString text;
+};
+
+// Interactive form field (AcroForm widget).
+enum class FieldKind { Text, CheckBox, Radio, Combo, List, Button, Signature, Other };
+struct FieldInfo {
+    int id = 0;
+    FieldKind kind = FieldKind::Other;
+    QRectF rect;
+    QString value;
+    QStringList options;     // combo / list boxes
+    bool multiline = false, readonly = false, checked = false;
+    int maxLen = 0;
+    float fontSize = 0;      // 0 = auto
 };
 
 struct InkAnnot {
@@ -141,6 +166,9 @@ public:
     QString selectionText(int page, QPointF a, QPointF b);
     QVector<QPolygonF> search(int page, const QString &needle);
     QVector<AnnotInfo> annots(int page);
+    QVector<MarkupNote> markups();                       // whole document, quick (no page loading)
+    QString textInQuads(int page, const QVector<QPolygonF> &quads);
+    QVector<FieldInfo> fields(int page);
     QVector<InkAnnot> inkAnnots(int page);
 
     // Annotation editing (GUI thread). Each call is one undo step.
@@ -153,6 +181,12 @@ public:
     void setAnnotRect(int page, int id, const QRectF &r);
     void scaleFreeText(int page, int id, const QRectF &r, float fontSize);   // keeps font and colour
     void removeAnnots(int page, const QVector<int> &ids);
+    void setAnnotContents(int page, int id, const QString &text);
+
+    // Form filling
+    void setFieldText(int page, int id, const QString &text);
+    void toggleField(int page, int id);
+    void setFieldChoice(int page, int id, const QString &option);
 
     // Page editing
     void rearrange(const QVector<int> &order);          // subset/permutation of current pages

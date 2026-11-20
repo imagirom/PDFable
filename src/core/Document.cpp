@@ -70,6 +70,7 @@ static inline QPointF qp(fz_point p) { return QPointF(p.x, p.y); }
 static inline fz_rect fr(const QRectF &r) { return fz_make_rect(float(r.left()), float(r.top()), float(r.right()), float(r.bottom())); }
 static inline QRectF qr(fz_rect r) { return QRectF(QPointF(r.x0, r.y0), QPointF(r.x1, r.y1)); }
 static QPolygonF qquad(const fz_quad &q) { return QPolygonF({qp(q.ul), qp(q.ur), qp(q.lr), qp(q.ll)}); }
+static inline QPointF qp_point(fz_point p) { return QPointF(p.x, p.y); }
 
 // ---------------------------------------------------------------- InkData
 QRectF InkData::bounds() const
@@ -624,6 +625,14 @@ QVector<AnnotInfo> Document::annots(int page)
                         float col[4] = {0, 0, 0, 0};
                         pdf_annot_default_appearance(c, a, &font, &ai.fontSize, &n, col);
                         ai.color = n == 3 ? QColor::fromRgbF(col[0], col[1], col[2]) : n == 1 ? QColor::fromRgbF(col[0], col[0], col[0]) : QColor(Qt::black);
+                    } else if (ai.kind == AnnotKind::Highlight || ai.kind == AnnotKind::Underline || ai.kind == AnnotKind::StrikeOut) {
+                        ai.text = QString::fromUtf8(pdf_annot_contents(c, a));
+                        int n = 0;
+                        float col[4] = {0, 0, 0, 0};
+                        pdf_annot_color(c, a, &n, col);
+                        ai.color = n == 3 ? QColor::fromRgbF(col[0], col[1], col[2]) : n == 1 ? QColor::fromRgbF(col[0], col[0], col[0]) : QColor(255, 235, 60);
+                        int nq = pdf_annot_quad_point_count(c, a);
+                        for (int q = 0; q < nq; ++q) ai.quads.push_back(qquad(pdf_annot_quad_point(c, a, q)));
                     }
                     out.push_back(ai);
                 }
@@ -776,6 +785,182 @@ void Document::scaleFreeText(int page, int id, const QRectF &r, float fontSize)
         QByteArray fontName = font ? QByteArray(font) : QByteArray("Helv");
         pdf_set_annot_rect(c, a, fr(r));
         pdf_set_annot_default_appearance(c, a, fontName.constData(), fontSize, n, col);
+    });
+}
+
+void Document::setAnnotContents(int page, int id, const QString &text)
+{
+    pageOp(page, "Note", [&](fz_context *c, pdf_page *pg) { pdf_set_annot_contents(c, findAnnot(c, pg, id), text.toUtf8().constData()); });
+}
+
+// Reads the markings straight from the page dictionaries: much faster than loading every page,
+// which matters for long documents because the notes sidebar needs all of them.
+QVector<MarkupNote> Document::markups()
+{
+    std::lock_guard<std::recursive_mutex> lk(mu_);
+    QVector<MarkupNote> out;
+    if (!doc_) return out;
+    try {
+        fzrun([&](fz_context *c) {
+            int n = pdf_count_pages(c, doc_);
+            for (int i = 0; i < n; ++i) {
+                pdf_obj *po = pdf_lookup_page_obj(c, doc_, i);
+                pdf_obj *annots = pdf_dict_get(c, po, PDF_NAME(Annots));
+                int na = pdf_array_len(c, annots);
+                if (na == 0) continue;
+                fz_rect box;
+                fz_matrix ctm;
+                pdf_page_obj_transform(c, po, &box, &ctm);
+                for (int k = 0; k < na; ++k) {
+                    pdf_obj *ref = pdf_array_get(c, annots, k);
+                    pdf_obj *st = pdf_dict_get(c, ref, PDF_NAME(Subtype));
+                    MarkupNote m;
+                    if (pdf_name_eq(c, st, PDF_NAME(Highlight))) m.kind = AnnotKind::Highlight;
+                    else if (pdf_name_eq(c, st, PDF_NAME(Underline))) m.kind = AnnotKind::Underline;
+                    else if (pdf_name_eq(c, st, PDF_NAME(StrikeOut))) m.kind = AnnotKind::StrikeOut;
+                    else continue;
+                    m.page = i;
+                    m.id = pdf_to_num(c, ref);
+                    if (m.id <= 0) continue;
+                    m.rect = qr(fz_transform_rect(pdf_to_rect(c, pdf_dict_get(c, ref, PDF_NAME(Rect))), ctm));
+                    m.text = QString::fromUtf8(pdf_dict_get_text_string(c, ref, PDF_NAME(Contents)));
+                    pdf_obj *col = pdf_dict_get(c, ref, PDF_NAME(C));
+                    int cn = pdf_array_len(c, col);
+                    if (cn == 3) m.color = QColor::fromRgbF(pdf_array_get_real(c, col, 0), pdf_array_get_real(c, col, 1), pdf_array_get_real(c, col, 2));
+                    else if (cn == 1) m.color = QColor::fromRgbF(pdf_array_get_real(c, col, 0), pdf_array_get_real(c, col, 0), pdf_array_get_real(c, col, 0));
+                    else m.color = QColor(255, 235, 60);
+                    pdf_obj *qp = pdf_dict_get(c, ref, PDF_NAME(QuadPoints));
+                    int nq = pdf_array_len(c, qp) / 8;
+                    for (int q = 0; q < nq; ++q) {
+                        auto pt = [&](int j) {
+                            return qp_point(fz_transform_point(fz_make_point(pdf_array_get_real(c, qp, q * 8 + j * 2), pdf_array_get_real(c, qp, q * 8 + j * 2 + 1)), ctm));
+                        };
+                        // PDF order: upper-left, upper-right, lower-left, lower-right
+                        m.quads.push_back(QPolygonF({pt(0), pt(1), pt(3), pt(2)}));
+                    }
+                    if (m.quads.isEmpty()) m.quads.push_back(QPolygonF(m.rect));
+                    out.push_back(m);
+                }
+            }
+        });
+    } catch (const PdfError &) {}
+    return out;
+}
+
+QString Document::textInQuads(int page, const QVector<QPolygonF> &quads)
+{
+    std::lock_guard<std::recursive_mutex> lk(mu_);
+    QStringList parts;
+    if (!doc_ || page < 0 || page >= sizes_.size()) return QString();
+    try {
+        fzrun([&](fz_context *c) {
+            auto *st = static_cast<fz_stext_page *>(stext(c, page));
+            for (const QPolygonF &q : quads) {
+                QRectF r = q.boundingRect();
+                // shrink vertically a little so the line above/below is not picked up
+                r.adjust(0, r.height() * 0.25, 0, -r.height() * 0.25);
+                char *t = fz_copy_rectangle(c, st, fr(r), 0);
+                parts << QString::fromUtf8(t).simplified();
+                fz_free(c, t);
+            }
+        });
+    } catch (const PdfError &) {}
+    return parts.join(' ').simplified();
+}
+
+// ---------------------------------------------------------------- form fields
+static pdf_annot *findWidget(fz_context *c, pdf_page *pg, int id)
+{
+    for (pdf_annot *w = pdf_first_widget(c, pg); w; w = pdf_next_widget(c, w))
+        if (annotId(c, w) == id) return w;
+    fz_throw(c, FZ_ERROR_GENERIC, "form field not found");
+}
+
+QVector<FieldInfo> Document::fields(int page)
+{
+    std::lock_guard<std::recursive_mutex> lk(mu_);
+    QVector<FieldInfo> out;
+    if (!doc_ || page < 0 || page >= sizes_.size()) return out;
+    try {
+        fzrun([&](fz_context *c) {
+            // cheap test first: most pages have no widgets at all
+            pdf_obj *annots = pdf_dict_get(c, pdf_lookup_page_obj(c, doc_, page), PDF_NAME(Annots));
+            bool any = false;
+            for (int k = 0; k < pdf_array_len(c, annots) && !any; ++k)
+                any = pdf_name_eq(c, pdf_dict_get(c, pdf_array_get(c, annots, k), PDF_NAME(Subtype)), PDF_NAME(Widget));
+            if (!any) return;
+            pdf_page *pg = pdf_load_page(c, doc_, page);
+            fz_try(c)
+            {
+                for (pdf_annot *w = pdf_first_widget(c, pg); w; w = pdf_next_widget(c, w)) {
+                    FieldInfo f;
+                    f.id = annotId(c, w);
+                    f.rect = qr(pdf_bound_annot(c, w));
+                    pdf_obj *obj = pdf_annot_obj(c, w);
+                    int flags = pdf_field_flags(c, obj);
+                    f.readonly = pdf_widget_is_readonly(c, w) != 0;
+                    switch (pdf_widget_type(c, w)) {
+                    case PDF_WIDGET_TYPE_TEXT: f.kind = FieldKind::Text; break;
+                    case PDF_WIDGET_TYPE_CHECKBOX: f.kind = FieldKind::CheckBox; break;
+                    case PDF_WIDGET_TYPE_RADIOBUTTON: f.kind = FieldKind::Radio; break;
+                    case PDF_WIDGET_TYPE_COMBOBOX: f.kind = FieldKind::Combo; break;
+                    case PDF_WIDGET_TYPE_LISTBOX: f.kind = FieldKind::List; break;
+                    case PDF_WIDGET_TYPE_BUTTON: f.kind = FieldKind::Button; break;
+                    case PDF_WIDGET_TYPE_SIGNATURE: f.kind = FieldKind::Signature; break;
+                    default: f.kind = FieldKind::Other; break;
+                    }
+                    f.value = QString::fromUtf8(pdf_field_value(c, obj));
+                    if (f.kind == FieldKind::CheckBox || f.kind == FieldKind::Radio) {
+                        // the widget is "on" when its appearance state is not Off
+                        pdf_obj *as = pdf_dict_get(c, obj, PDF_NAME(AS));
+                        f.checked = as && !pdf_name_eq(c, as, PDF_NAME(Off));
+                    }
+                    if (f.kind == FieldKind::Text) {
+                        f.multiline = (flags & PDF_TX_FIELD_IS_MULTILINE) != 0;
+                        f.maxLen = pdf_text_widget_max_len(c, w);
+                    }
+                    if (f.kind == FieldKind::Combo || f.kind == FieldKind::List) {
+                        int n = pdf_choice_widget_options(c, w, 0, nullptr);
+                        std::vector<const char *> opts(size_t(qMax(n, 0)));
+                        if (n > 0) pdf_choice_widget_options(c, w, 0, opts.data());
+                        for (const char *o : opts) f.options << QString::fromUtf8(o ? o : "");
+                    }
+                    if (f.kind == FieldKind::Text || f.kind == FieldKind::Combo) {
+                        const char *font = nullptr;
+                        int n = 0;
+                        float col[4] = {0, 0, 0, 0};
+                        fz_try(c) pdf_annot_default_appearance(c, w, &font, &f.fontSize, &n, col);
+                        fz_catch(c) f.fontSize = 0;
+                    }
+                    out.push_back(f);
+                }
+            }
+            fz_always(c) fz_drop_page(c, reinterpret_cast<fz_page *>(pg));
+            fz_catch(c) fz_rethrow(c);
+        });
+    } catch (const PdfError &) {}
+    return out;
+}
+
+void Document::setFieldText(int page, int id, const QString &text)
+{
+    pageOp(page, "Fill field", [&](fz_context *c, pdf_page *pg) {
+        if (!pdf_set_text_field_value(c, findWidget(c, pg, id), text.toUtf8().constData()))
+            fz_throw(c, FZ_ERROR_GENERIC, "the form rejected this value");
+    });
+}
+
+void Document::toggleField(int page, int id)
+{
+    pageOp(page, "Toggle field", [&](fz_context *c, pdf_page *pg) { pdf_toggle_widget(c, findWidget(c, pg, id)); });
+}
+
+void Document::setFieldChoice(int page, int id, const QString &option)
+{
+    pageOp(page, "Choose", [&](fz_context *c, pdf_page *pg) {
+        QByteArray o = option.toUtf8();
+        const char *opts[1] = {o.constData()};
+        pdf_choice_widget_set_value(c, findWidget(c, pg, id), 1, opts);
     });
 }
 

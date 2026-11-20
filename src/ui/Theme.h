@@ -7,7 +7,10 @@
 class QApplication;
 
 namespace Theme {
-void apply(QApplication &app);
+enum class Mode { System = 0, Light = 1, Dark = 2 };
+void apply(QApplication &app);     // reads the saved mode
+void setMode(Mode m);              // re-colours the running application and saves the mode
+Mode mode();
 bool isDark();
 QColor accent();
 QIcon icon(const QString &name);

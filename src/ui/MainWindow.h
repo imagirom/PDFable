@@ -2,6 +2,7 @@
 // or dropped onto the tab bar of another window.
 #pragma once
 #include "DocumentTab.h"
+#include "Theme.h"
 #include <QMainWindow>
 #include <QTabBar>
 #include <QAbstractButton>
@@ -92,6 +93,7 @@ public:
     void adoptTab(DocumentTab *tab, int index);                  // move a tab here from any window
     void setTool(Tool t);
     void toggleFullScreen();
+    static void setInterfaceMode(Theme::Mode m);
     void openCreator();
     static void restoreSession();
 

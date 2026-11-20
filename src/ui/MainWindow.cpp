@@ -182,7 +182,7 @@ void SwatchButton::paintEvent(QPaintEvent *)
         p.setBrush(Qt::NoBrush);
         p.drawEllipse(c, 11, 11);
     }
-    p.setPen(QPen(QColor(0, 0, 0, 70), 1));
+    p.setPen(QPen(Theme::isDark() ? QColor(255, 255, 255, 110) : QColor(0, 0, 0, 70), 1));
     p.setBrush(color_);
     p.drawEllipse(c, isChecked() ? 7.5 : 8.5, isChecked() ? 7.5 : 8.5);
 }
@@ -281,6 +281,12 @@ void MainWindow::buildActions()
         connect(a, &QAction::triggered, this, [this, i] { setPageTheme(PageTheme(i)); });
     }
     connect(themeM, &QMenu::aboutToShow, this, [themeGroup] { themeGroup->actions().at(int(PageColors::theme()))->setChecked(true); });
+    QAction *darkUi = add(viewM, tr("&Dark interface"), QKeySequence("Ctrl+Alt+D"), [] {
+        MainWindow::setInterfaceMode(Theme::isDark() ? Theme::Mode::Light : Theme::Mode::Dark);
+    });
+    darkUi->setCheckable(true);
+    darkUi->setChecked(Theme::isDark());
+    darkUi->setObjectName("darkInterfaceAction");
     add(viewM, tr("Toggle dark pages"), QKeySequence("Ctrl+I"), [this] {
         setPageTheme(PageColors::theme() == PageTheme::Dark ? PageTheme::Light : PageTheme::Dark);
     });
@@ -343,6 +349,7 @@ void MainWindow::buildActions()
     tb->setIconSize(QSize(20, 20));
     auto deco = [](QAction *a, const char *icon, const QString &tip) {
         a->setIcon(Theme::icon(icon));
+        a->setProperty("pdfableIcon", QString::fromLatin1(icon));     // redrawn when the theme changes
         QString t = tip;
         if (!a->shortcut().isEmpty()) t += QString("  (%1)").arg(a->shortcut().toString(QKeySequence::NativeText));
         a->setToolTip(t);
@@ -518,6 +525,22 @@ void MainWindow::openCreator()
     }, Qt::UniqueConnection);
 }
 
+// Switch light/dark interface in every open window: palette, style sheet and the drawn icons.
+void MainWindow::setInterfaceMode(Theme::Mode m)
+{
+    Theme::setMode(m);
+    for (MainWindow *w : std::as_const(g_windows)) {
+        for (QAction *a : w->findChildren<QAction *>()) {
+            QString icon = a->property("pdfableIcon").toString();
+            if (!icon.isEmpty()) a->setIcon(Theme::icon(icon));
+            if (a->objectName() == "darkInterfaceAction") a->setChecked(Theme::isDark());
+        }
+        w->refreshToolOptions();
+        w->update();
+    }
+    for (QWidget *top : QApplication::topLevelWidgets()) top->update();
+}
+
 void MainWindow::showPreferences()
 {
     QDialog d(this);
@@ -545,6 +568,11 @@ void MainWindow::showPreferences()
     theme->setCurrentIndex(int(PageColors::theme()));
     connect(theme, &QComboBox::currentIndexChanged, this, [this](int i) { setPageTheme(PageTheme(i)); });
     form->addRow(tr("Page theme"), theme);
+    auto *ui = new QComboBox;
+    ui->addItems({tr("Follow Windows"), tr("Light"), tr("Dark")});
+    ui->setCurrentIndex(int(Theme::mode()));
+    connect(ui, &QComboBox::currentIndexChanged, this, [](int i) { MainWindow::setInterfaceMode(Theme::Mode(i)); });
+    form->addRow(tr("Interface (Ctrl+Alt+D)"), ui);
     auto *note = new QLabel(tr("Pen, mouse and finger: the pen and the mouse each keep their own tool. Tap a toolbar "
                                "button with the pen to set the pen's tool, click it with the mouse to set the mouse's "
                                "tool. A finger always pans and zooms."));

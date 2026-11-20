@@ -506,24 +506,24 @@ int main(int argc, char **argv)
         auto *le = qobject_cast<QLineEdit *>(fv->fieldEditor());
         CHECK(le != nullptr);
         if (le) {
-            le->setText("Tobias Rieger");
+            le->setText("Erika Mustermann");
             QKeyEvent tab(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
             QApplication::sendEvent(le, &tab);                      // commits and moves to the e-mail field
         }
         auto *le2 = qobject_cast<QLineEdit *>(fv->fieldEditor());
         CHECK(le2 && le2 != le && le2->maxLength() == 40);
-        if (le2) le2->setText("tobias@example.org");
+        if (le2) le2->setText("erika@example.org");
         wait(50);
         fv->viewport()->grab().save(out + "/9a_form_editing.png");
         fv->commitFieldEdit();
         fv->testPointer(0, centre(3), -1, 20100);                    // checkbox
         fv->testPointer(2, centre(3), -1, 20110);
         fs = fd->fields(0);
-        CHECK(fs[0].value == "Tobias Rieger" && fs[1].value == "tobias@example.org" && fs[3].checked);
+        CHECK(fs[0].value == "Erika Mustermann" && fs[1].value == "erika@example.org" && fs[3].checked);
         CHECK(w->currentTab()->save());
         Document again;
         again.open(out + "/form.pdf");
-        CHECK(again.fields(0)[0].value == "Tobias Rieger" && again.fields(0)[3].checked);
+        CHECK(again.fields(0)[0].value == "Erika Mustermann" && again.fields(0)[3].checked);
         wait(400);
         fv->viewport()->grab().save(out + "/9b_form_filled.png");
     }

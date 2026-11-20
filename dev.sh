@@ -2,6 +2,7 @@
 # PDFable development script for WSL (Ubuntu) and native Linux.
 #
 #   ./dev.sh setup       install build tools, Qt 6.8.3 and MuPDF 1.28.6 (once)
+#   ./dev.sh packages    only the apt packages (run as root: wsl -u root ./dev.sh packages)
 #   ./dev.sh build       build the Linux version (and the self-test)
 #   ./dev.sh test        run the headless self-test
 #   ./dev.sh run [pdf]   start PDFable (WSLg shows the window on Windows)
@@ -35,16 +36,28 @@ is_wsl() { grep -qi microsoft /proc/version 2>/dev/null; }
 version() { sed -n 's/^project(PDFable VERSION \([0-9.]*\).*/\1/p' "$ROOT/CMakeLists.txt"; }
 
 # ---------------------------------------------------------------- setup
-setup_packages() {
-    say "Installing build tools and libraries (sudo password may be asked)"
-    sudo apt-get update -q
-    sudo apt-get install -y -q build-essential cmake ninja-build git pkg-config python3-venv python3-pip \
+APT_PACKAGES=(build-essential cmake ninja-build git pkg-config python3-venv python3-pip \
         curl rsync zip unzip file patchelf \
         libgl1-mesa-dev libegl1-mesa-dev libglib2.0-0 libfontconfig1 libfreetype6 libdbus-1-3 \
         libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
         libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxcb-xfixes0 \
         libxcb-sync1 libxcb-shm0 libx11-xcb1 libxrender1 libxi6 libsm6 libice6 libwayland-client0 \
-        libwayland-cursor0 libwayland-egl1
+        libwayland-cursor0 libwayland-egl1)
+
+# A stamp records the installed package list (names differ slightly between Ubuntu releases,
+# so asking dpkg for each name is not reliable). It lives outside $HOME because the install
+# may run as root (wsl -u root) while the build runs as the normal user.
+APT_STAMP=/var/local/pdfable-packages.stamp
+packages_missing() { [[ "$(cat "$APT_STAMP" 2>/dev/null)" != "${APT_PACKAGES[*]}" ]]; }
+
+setup_packages() {
+    if ! packages_missing; then say "Build tools and libraries: installed"; return; fi
+    say "Installing build tools and libraries"
+    local sudo=sudo
+    [[ $(id -u) -eq 0 ]] && sudo=
+    $sudo apt-get update -q
+    DEBIAN_FRONTEND=noninteractive $sudo apt-get install -y -q "${APT_PACKAGES[@]}"
+    echo "${APT_PACKAGES[*]}" | $sudo tee "$APT_STAMP" >/dev/null
 }
 
 setup_qt() {
@@ -84,7 +97,6 @@ setup_mupdf() {
 
 cmd_setup() {
     mkdir -p "$DEPS"
-    exec > >(tee "$LOGS/setup.log") 2>&1
     if command -v apt-get >/dev/null; then setup_packages; else say "No apt-get: install a C++ compiler, CMake, Ninja, git and Python 3 yourself"; fi
     if [[ "$QT_DIR" == "$DEPS/qt/"* ]]; then setup_qt; else say "Using Qt from QT_DIR=$QT_DIR"; fi
     setup_mupdf
@@ -190,7 +202,11 @@ cmd_windows() {
     say "Done: dist/PDFable-$(version)-windows-x64.zip"
 }
 
+# every run is also written to logs/dev-<command>.log
+case "${1:-help}" in setup|build|test|appimage|windows|all|packages) exec > >(tee "$LOGS/dev-$1.log") 2>&1 ;; esac
+
 case "${1:-help}" in
+    packages) setup_packages ;;
     setup) cmd_setup ;;
     build) cmd_build ;;
     test) cmd_test ;;

@@ -1,0 +1,17 @@
+# build output
+/build/
+/build-*/
+/dist/
+/deps/
+/AppDir/
+# logs
+build_log.txt
+aqtinstall.log
+*.log
+# editor / OS
+.vs/
+*.user
+.DS_Store
+Thumbs.db
+*.bak~
+*.tmp~

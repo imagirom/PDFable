@@ -1,0 +1,11 @@
+{
+  "name": "pdfable",
+  "version": "0.1.0",
+  "dependencies": ["libmupdf"],
+  "features": {
+    "signing": {
+      "description": "Certificate-based (PAdES) signing, enable together with -DPDFABLE_SIGNING=ON",
+      "dependencies": ["openssl"]
+    }
+  }
+}

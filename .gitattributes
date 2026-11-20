@@ -1,0 +1,12 @@
+# Normalise text files to LF in the repository.
+* text=auto eol=lf
+# Windows scripts must keep CRLF to run in cmd.exe.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.rc text eol=crlf
+# Binary assets
+*.png binary
+*.ico binary
+*.pdf binary
+*.jpg binary

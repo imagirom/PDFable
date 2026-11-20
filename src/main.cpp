@@ -80,6 +80,7 @@ int main(int argc, char **argv)
     app.setWindowIcon(QIcon(":/app.png"));
     PdfView::setPageTheme(PageTheme(qBound(0, QSettings().value("view/pageTheme", 0).toInt(), 2)));
     PdfView::setScrollSpeed(QSettings().value("view/scrollSpeed", 0.8).toDouble());
+    PdfView::setNoteAfterMarking(QSettings().value("notes/afterMarking", true).toBool());
     if (creator) {          // started as "PDFable Creator": only the creator window
         openCreator(files);
         return app.exec();

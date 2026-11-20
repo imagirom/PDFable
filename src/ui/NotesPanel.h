@@ -1,0 +1,67 @@
+// Notes sidebar: the notes attached to text markings, each shown at the height of its marking
+// in the document, with a fine line from the marking to the note (like comments in Word).
+#pragma once
+#include "Document.h"
+#include <QFrame>
+#include <QHash>
+#include <QPointer>
+#include <QTimer>
+#include <memory>
+
+class PdfView;
+class QLabel;
+class QPlainTextEdit;
+
+class NoteCard : public QFrame {
+    Q_OBJECT
+public:
+    NoteCard(const ink::MarkupNote &n, const QString &excerpt, QWidget *parent);
+    void setNote(const ink::MarkupNote &n);
+    const ink::MarkupNote &note() const { return note_; }
+    void startEditing();
+    bool isEditing() const { return editor_ != nullptr; }
+    void fitWidth(int w);
+signals:
+    void committed(int page, int id, const QString &text);
+    void cancelled(int id);
+    void deleteMarking(int page, int id);
+    void heightChanged();
+protected:
+    void mousePressEvent(QMouseEvent *e) override;
+    void contextMenuEvent(QContextMenuEvent *e) override;
+    bool eventFilter(QObject *o, QEvent *e) override;
+    void paintEvent(QPaintEvent *e) override;
+private:
+    void finish(bool keep);
+    ink::MarkupNote note_;
+    QLabel *excerpt_, *text_;
+    QPlainTextEdit *editor_ = nullptr;
+};
+
+class NotesPanel : public QWidget {
+    Q_OBJECT
+public:
+    NotesPanel(std::shared_ptr<ink::Document> doc, PdfView *view, QWidget *parent = nullptr);
+    void reload();                       // re-read all markings (call after document changes)
+    void editNote(int page, int id);     // open the editor of a marking's note (new or existing)
+    void setActive(bool on);             // visible: lines are drawn in the page view
+    int noteCount() const;
+    NoteCard *card(int id) const { return cards_.value(id); }
+protected:
+    void paintEvent(QPaintEvent *e) override;
+    void resizeEvent(QResizeEvent *e) override;
+private:
+    void relayout();
+    void updateLinks();
+    QPointF anchorOf(const ink::MarkupNote &n) const;
+    QString excerptFor(const ink::MarkupNote &n);
+
+    std::shared_ptr<ink::Document> doc_;
+    PdfView *view_;
+    QVector<ink::MarkupNote> notes_;     // markings that have a note (plus the one being written)
+    QHash<int, NoteCard *> cards_;
+    QHash<int, QString> excerpts_;
+    QVector<QPair<qreal, NoteCard *>> placed_;   // anchor y in panel coordinates, card
+    int editingId_ = 0;
+    bool active_ = false;
+};

@@ -23,6 +23,13 @@ struct PenStyle {
     float width = 1.6f;   // points
 };
 
+// Line from a marking to its note in the Notes sidebar (drawn from the marking to the left edge).
+struct NoteLink {
+    int page = 0;
+    QPointF anchor;      // page coordinates: left end of the marking, vertically centred
+    QColor color;
+};
+
 struct ViewState {
     double zoom = 0;   // 0 = unknown
     int page = 0;
@@ -82,7 +89,11 @@ public:
     bool hasTextSelection() const { return selPage_ >= 0 && !selQuads_.isEmpty(); }
     QString selectedText();
     void copySelection();
-    void markupSelection(ink::AnnotKind kind, const QColor &c);
+    int markupSelection(ink::AnnotKind kind, const QColor &c);   // returns the new annotation id (0 = none)
+    static void setNoteAfterMarking(bool on);    // open the note editor right after marking text
+    static bool noteAfterMarking();
+    void setNoteLinks(const QVector<NoteLink> &links) { noteLinks_ = links; viewport()->update(); }
+    void setNoteLinksVisible(bool on) { if (on != noteLinksVisible_) { noteLinksVisible_ = on; viewport()->update(); } }
     void deleteSelectedAnnot();
 
     // modes started from dialogs
@@ -106,6 +117,8 @@ signals:
     void toolChangeRequested(Tool t);
     void deviceUsed(bool pen);       // a pen or the mouse started an interaction on the page
     void historyChanged();
+    void viewChanged();                          // scrolled, zoomed or re-laid out
+    void noteRequested(int page, int annotId);   // open the note of a marking
 
 protected:
     void paintEvent(QPaintEvent *e) override;
@@ -193,6 +206,9 @@ private:
     bool lastWasPen_ = false;
     QVector<QColor> hlPalette_;
     QFrame *selBar_ = nullptr;
+    QVector<NoteLink> noteLinks_;
+    bool noteLinksVisible_ = false;
+    int pressMarkupPage_ = -1, pressMarkupId_ = 0;
     PenStyle pen_, hl_{QColor(255, 235, 60), 12.f};
     double zoom_ = 1.0;
     QVector<QRectF> pageRects_;

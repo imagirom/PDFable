@@ -32,6 +32,11 @@ A PDF reader and annotator for Windows pen devices, written in C++17 with Qt 6 W
   with one click; text boxes typed directly on the page (double-click to edit, drag a corner to change the
   font size); images. The Select tool
   moves and resizes ink, text boxes and images; Del removes them. Undo/redo for everything.
+- **Notes on markings** (like Zotero): select text, pick a colour in the small bar (or press Ctrl+H) and
+  type; the note appears in the sidebar's "Notes" tab at the height of the marking, joined to it by a fine
+  line. Click a note to edit it (Ctrl+Enter or a click elsewhere saves, Esc cancels); right-click to delete.
+  Preferences decide whether the note editor opens right after marking or only when you click a marking.
+  Notes are stored as standard PDF annotation comments, so other PDF readers show them too.
 - **PDF forms**: fillable fields are tinted blue. Click a text field and type on the page (Tab / Shift+Tab
   jump between fields, Enter or a click elsewhere confirms, Esc cancels); checkboxes and radio buttons toggle
   on click; dropdowns and list boxes open a menu. Works with the Select and Hand tools.

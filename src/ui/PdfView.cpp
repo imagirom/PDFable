@@ -32,6 +32,9 @@ using namespace ink;
 
 static const qreal kGap = 12, kMargin = 12;
 static double s_scrollSpeed = 0.8;
+static bool s_noteAfterMarking = true;
+void PdfView::setNoteAfterMarking(bool on) { s_noteAfterMarking = on; }
+bool PdfView::noteAfterMarking() { return s_noteAfterMarking; }
 static QList<PdfView *> s_views;
 static QElapsedTimer s_penClock;        // time since any pen was seen (hovering or touching)
 static qint64 s_lastPenMs = -100000;
@@ -117,6 +120,7 @@ void PdfView::relayout()
     }
     docSize_ = QSizeF(W, y - kGap + kMargin);
     updateScrollBars();
+    emit viewChanged();
 }
 
 void PdfView::updateScrollBars()
@@ -328,6 +332,7 @@ void PdfView::scrollContentsBy(int, int)
     if (fieldEdit_) layoutFieldEdit();
     hideSelBar();
     settleTimer_.start();
+    emit viewChanged();
     rebuildOverlay();
     hidePreview();
     viewport()->update();
@@ -551,6 +556,22 @@ void PdfView::paintEvent(QPaintEvent *e)
         p.restore();
     }
 
+    if (noteLinksVisible_ && !noteLinks_.isEmpty()) {      // fine lines from markings to their notes
+        p.save();
+        p.setRenderHint(QPainter::Antialiasing);
+        for (const NoteLink &l : std::as_const(noteLinks_)) {
+            if (l.page < 0 || l.page >= pageRects_.size()) continue;
+            QPointF a = pageToView(l.page, l.anchor);
+            if (a.y() < ev.top() - 2 || a.y() > ev.bottom() + 2) continue;
+            QColor c = l.color.darker(135);
+            p.setPen(QPen(c, 1.2));
+            p.drawLine(QPointF(0, a.y()), QPointF(a.x() - 1, a.y()));
+            p.setBrush(c);
+            p.setPen(Qt::NoPen);
+            p.drawEllipse(a, 2.5, 2.5);
+        }
+        p.restore();
+    }
     if (annPage_ >= 0 && annPage_ < pageRects_.size()) {
         QRectF vr = toView(annPage_, (drag_ == Drag::AnnotMove || drag_ == Drag::AnnotResize) ? annDragRect_ : ann_.rect);
         p.setRenderHint(QPainter::Antialiasing, false);
@@ -960,6 +981,14 @@ void PdfView::press(const Ptr &e)
         selPage_ = pg;
         selA_ = selB_ = pt;
         selQuads_.clear();
+        pressMarkupPage_ = -1;
+        pressMarkupId_ = 0;
+        for (const AnnotInfo &a : doc_->annots(pg))
+            for (const QPolygonF &q : a.quads)
+                if (q.containsPoint(pt, Qt::OddEvenFill)) {
+                    pressMarkupPage_ = pg;
+                    pressMarkupId_ = a.id;
+                }
         viewport()->update();
         break;
     }
@@ -1044,8 +1073,12 @@ void PdfView::release(const Ptr &e)
             gotoPage(pressLink_.page, pressLink_.dest.y());
         break;
     case Drag::TextSel:
-        if (selQuads_.isEmpty()) selPage_ = -1;
-        else showSelBar(e.pos);
+        if (selQuads_.isEmpty()) {
+            selPage_ = -1;
+            if (pressMarkupId_ && QLineF(pressPos_, e.pos).length() < 5 && !isPreview_) emit noteRequested(pressMarkupPage_, pressMarkupId_);
+        } else
+            showSelBar(e.pos);
+        pressMarkupId_ = 0;
         break;
     case Drag::AnnotMove: applyAnnotDrag(false); break;
     case Drag::AnnotResize: applyAnnotDrag(true); break;
@@ -1721,17 +1754,20 @@ void PdfView::hideSelBar()
     selBar_ = nullptr;
 }
 
-void PdfView::markupSelection(AnnotKind kind, const QColor &c)
+int PdfView::markupSelection(AnnotKind kind, const QColor &c)
 {
-    if (!hasTextSelection()) return;
+    if (!hasTextSelection()) return 0;
+    int id = 0, page = selPage_;
     try {
         flushInk();
-        doc_->addMarkup(selPage_, kind, selQuads_, c);
+        id = doc_->addMarkup(selPage_, kind, selQuads_, c);
     } catch (const PdfError &err) { emit statusMessage(err.message()); }
     selPage_ = -1;
     selQuads_.clear();
     hideSelBar();
     viewport()->update();
+    if (id && s_noteAfterMarking && !isPreview_) emit noteRequested(page, id);
+    return id;
 }
 
 // ------------------------------------------------------------------ placing / picking

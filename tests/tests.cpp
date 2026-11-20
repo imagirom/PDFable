@@ -2,6 +2,7 @@
 #include "Dialogs.h"
 #include "Creator.h"
 #include "MainWindow.h"
+#include "NotesPanel.h"
 #include "Theme.h"
 #include <QPlainTextEdit>
 #include <QApplication>
@@ -421,6 +422,72 @@ int main(int argc, char **argv)
     wait(100);
     std::printf("     tabs=%d windows=%d\n", w->tabCount(), int(MainWindow::windows().size()));
     CHECK(w->tabCount() == 2 && MainWindow::windows().size() == 1);
+
+    // notes on markings: highlight -> note editor opens in the Notes tab -> typed text is stored
+    {
+        DocumentTab *nt = w->currentTab();
+        PdfView *nv = nt->view();
+        Document *nd = nt->doc();
+        nv->setTools(Tool::Select, Tool::Select);
+        nv->gotoPage(1, 100, false);
+        wait(200);
+        PdfView::setNoteAfterMarking(true);
+        QPointF a = nv->pageToView(1, QPointF(75, 255)), b = nv->pageToView(1, QPointF(330, 262));
+        nv->testPointer(0, a, -1, 30000);
+        nv->testPointer(1, b, -1, 30010);
+        nv->testPointer(2, b, -1, 30020);
+        CHECK(nv->hasTextSelection());
+        int id = nv->markupSelection(AnnotKind::Highlight, QColor(255, 235, 60));
+        CHECK(id > 0);
+        wait(50);
+        NotesPanel *np = nt->notesPanel();
+        NoteCard *card = np->card(id);
+        CHECK(card && card->isEditing() && np->isVisible());
+        QPlainTextEdit *ed = card ? card->findChild<QPlainTextEdit *>() : nullptr;
+        CHECK(ed && ed->hasFocus());
+        if (ed) {
+            ed->setPlainText("Check this functional against the Thomas-Fermi limit.");
+            QKeyEvent done(QEvent::KeyPress, Qt::Key_Return, Qt::ControlModifier);
+            QApplication::sendEvent(ed, &done);
+        }
+        wait(300);
+        QString stored;
+        for (const MarkupNote &m : nd->markups()) if (m.id == id) stored = m.text;
+        CHECK(stored.startsWith("Check this functional"));
+        // a second note further down, written by clicking an existing marking
+        PdfView::setNoteAfterMarking(false);
+        a = nv->pageToView(1, QPointF(75, 418)); b = nv->pageToView(1, QPointF(300, 424));
+        nv->testPointer(0, a, -1, 31000);
+        nv->testPointer(1, b, -1, 31010);
+        nv->testPointer(2, b, -1, 31020);
+        int id2 = nv->markupSelection(AnnotKind::Highlight, QColor(140, 235, 130));
+        wait(300);
+        CHECK(id2 > 0 && !np->card(id2));                 // setting off: no editor yet
+        QPointF c = nv->pageToView(1, QPointF(150, 421));
+        nv->testPointer(0, c, -1, 32000);
+        nv->testPointer(2, c, -1, 32010);
+        wait(50);
+        CHECK(np->card(id2) && np->card(id2)->isEditing());
+        if (np->card(id2)) {
+            auto *ed2 = np->card(id2)->findChild<QPlainTextEdit *>();
+            ed2->setPlainText("Second note: compare with the gradient expansion.");
+            QKeyEvent done(QEvent::KeyPress, Qt::Key_Return, Qt::ControlModifier);
+            QApplication::sendEvent(ed2, &done);
+        }
+        wait(400);
+        CHECK(np->noteCount() == 2);
+        // cards sit at the height of their markings
+        NoteCard *c1 = np->card(id), *c2 = np->card(id2);
+        if (c1 && c2) {
+            QRectF q1;
+            for (const MarkupNote &m : nd->markups()) if (m.id == id) q1 = m.quads.first().boundingRect();
+            QPoint anchor1 = np->mapFromGlobal(nv->viewport()->mapToGlobal(nv->pageToView(1, QPointF(q1.left(), q1.center().y())).toPoint()));
+            std::printf("     card1 y=%d anchor y=%d, card2 y=%d\n", c1->y(), anchor1.y(), c2->y());
+            CHECK(std::abs(c1->y() + 14 - anchor1.y()) < 4 && c2->y() > c1->y() + c1->height());
+        }
+        nt->window()->grab().save(out + "/9c_notes.png");
+        PdfView::setNoteAfterMarking(true);
+    }
 
     // fillable forms: type in place, Tab to the next field, checkbox, saved values
     {

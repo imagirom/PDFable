@@ -10,6 +10,7 @@ class QListWidget;
 class QLineEdit;
 class QLabel;
 class QSplitter;
+class NotesPanel;
 class QFileSystemWatcher;
 
 class DocumentTab : public QWidget {
@@ -64,6 +65,14 @@ private:
     QLabel *searchInfo_;
     QVector<ink::SignatureInfo> sigs_;
     int sigCount_ = 0;
+    QWidget *sigPanel_ = nullptr;
+    NotesPanel *notes_ = nullptr;
+    QTimer *notesTimer_ = nullptr;
+    void updateNotesActive();
+public:
+    NotesPanel *notesPanel() const { return notes_; }
+    void showNotes();
+private:
     bool rebuilding_ = false;
     QFileSystemWatcher *watcher_ = nullptr;
     QTimer reloadTimer_;

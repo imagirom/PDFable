@@ -1,5 +1,6 @@
 #include "DocumentTab.h"
 #include "Dialogs.h"
+#include "NotesPanel.h"
 
 #include <QAction>
 #include <QApplication>
@@ -60,11 +61,13 @@ DocumentTab::DocumentTab(std::shared_ptr<Document> doc, QWidget *parent) : QWidg
     pages_->setContextMenuPolicy(Qt::CustomContextMenu);
     pages_->setToolTip(tr("Drag pages to reorder them. Right-click for more."));
     side_->addTab(pages_, tr("Pages"));
+    notes_ = new NotesPanel(doc_, view_);
+    side_->addTab(notes_, tr("Notes"));
 
     sigTree_ = new QTreeWidget;
     sigTree_->setHeaderHidden(true);
     sigTree_->setWordWrap(true);
-    auto *sigPanel = new QWidget;
+    auto *sigPanel = sigPanel_ = new QWidget;
     auto *sl = new QVBoxLayout(sigPanel);
     sl->setContentsMargins(0, 0, 0, 0);
     sl->addWidget(sigTree_, 1);
@@ -118,6 +121,17 @@ DocumentTab::DocumentTab(std::shared_ptr<Document> doc, QWidget *parent) : QWidg
     connect(pages_->model(), &QAbstractItemModel::rowsMoved, this, [this] { QTimer::singleShot(0, this, &DocumentTab::pagesMoved); });
     connect(pages_->verticalScrollBar(), &QScrollBar::valueChanged, this, &DocumentTab::requestThumbs);
     connect(side_, &QTabWidget::currentChanged, this, &DocumentTab::requestThumbs);
+    connect(side_, &QTabWidget::currentChanged, this, &DocumentTab::updateNotesActive);
+    notesTimer_ = new QTimer(this);
+    notesTimer_->setSingleShot(true);
+    notesTimer_->setInterval(150);
+    connect(notesTimer_, &QTimer::timeout, notes_, &NotesPanel::reload);
+    connect(doc_.get(), &Document::pageChanged, notesTimer_, qOverload<>(&QTimer::start));
+    connect(doc_.get(), &Document::structureChanged, notesTimer_, qOverload<>(&QTimer::start));
+    connect(view_, &PdfView::noteRequested, this, [this](int page, int id) {
+        showNotes();
+        notes_->editNote(page, id);
+    });
     connect(pages_, &QWidget::customContextMenuRequested, this, [this](const QPoint &p) {
         QMenu m(this);
         m.addAction(tr("Rotate left"), this, [this] { rotatePages(-90); });
@@ -200,6 +214,7 @@ DocumentTab::DocumentTab(std::shared_ptr<Document> doc, QWidget *parent) : QWidg
     rebuildPages();
     refreshSignatures();
     side_->setCurrentIndex(outline_->topLevelItemCount() ? 0 : 1);
+    notes_->reload();
 }
 
 void DocumentTab::watchFile()
@@ -419,21 +434,35 @@ void DocumentTab::showSearch()
     searchEdit_->selectAll();
 }
 
-void DocumentTab::toggleSidebar() { side_->setVisible(!side_->isVisible()); }
+void DocumentTab::toggleSidebar()
+{
+    side_->setVisible(!side_->isVisible());
+    updateNotesActive();
+}
+
+void DocumentTab::updateNotesActive() { notes_->setActive(side_->isVisible() && side_->currentWidget() == notes_); }
+
+void DocumentTab::showNotes()
+{
+    side_->show();
+    side_->setCurrentWidget(notes_);
+    updateNotesActive();
+}
 
 void DocumentTab::showSignatures()
 {
     side_->show();
-    if (side_->count() > 2) side_->setCurrentIndex(2);
+    if (side_->indexOf(sigPanel_) >= 0) side_->setCurrentWidget(sigPanel_);
 }
 
 void DocumentTab::refreshSignatures()
 {
     sigTree_->clear();
-    if (side_->count() < 3) return;
+    int sigTab = side_->indexOf(sigPanel_);
+    if (sigTab < 0) return;
     sigs_ = doc_->signatures(SignatureLibrary::trustedCerts());
     sigCount_ = sigs_.size();
-    side_->setTabText(2, sigCount_ ? tr("Signatures (%1)").arg(sigCount_) : tr("Signatures"));
+    side_->setTabText(sigTab, sigCount_ ? tr("Signatures (%1)").arg(sigCount_) : tr("Signatures"));
     if (sigs_.isEmpty()) {
         new QTreeWidgetItem(sigTree_, {tr("This document has no digital signatures.")});
         return;

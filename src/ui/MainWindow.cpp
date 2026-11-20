@@ -248,7 +248,7 @@ void MainWindow::buildActions()
     QAction *redo = add(edit, tr("&Redo"), QKeySequence("Ctrl+Y"), withTab([](DocumentTab *t) { t->redo(); }));
     edit->addSeparator();
     add(edit, tr("&Copy"), QKeySequence::Copy, withTab([](DocumentTab *t) { t->view()->copySelection(); }));
-    add(edit, tr("&Highlight selection"), QKeySequence("Ctrl+H"), withTab([this](DocumentTab *t) { t->view()->markupSelection(AnnotKind::Highlight, hl_.color); }));
+    add(edit, tr("&Highlight selection (with note)"), QKeySequence("Ctrl+H"), withTab([this](DocumentTab *t) { t->view()->markupSelection(AnnotKind::Highlight, hl_.color); }));
     add(edit, tr("&Underline selection"), QKeySequence("Ctrl+U"), withTab([](DocumentTab *t) { t->view()->markupSelection(AnnotKind::Underline, QColor(220, 40, 40)); }));
     add(edit, tr("&Find…"), QKeySequence::Find, withTab([](DocumentTab *t) { t->showSearch(); }));
     edit->addSeparator();
@@ -573,6 +573,15 @@ void MainWindow::showPreferences()
     ui->setCurrentIndex(int(Theme::mode()));
     connect(ui, &QComboBox::currentIndexChanged, this, [](int i) { MainWindow::setInterfaceMode(Theme::Mode(i)); });
     form->addRow(tr("Interface (Ctrl+Alt+D)"), ui);
+    auto *noteMode = new QComboBox;
+    noteMode->addItems({tr("Right after marking (colour bar or Ctrl+H)"), tr("Only when I click the marking")});
+    noteMode->setCurrentIndex(PdfView::noteAfterMarking() ? 0 : 1);
+    noteMode->setToolTip(tr("Clicking a marking always opens its note."));
+    connect(noteMode, &QComboBox::currentIndexChanged, this, [](int i) {
+        PdfView::setNoteAfterMarking(i == 0);
+        QSettings().setValue("notes/afterMarking", i == 0);
+    });
+    form->addRow(tr("Open the note editor"), noteMode);
     auto *note = new QLabel(tr("Pen, mouse and finger: the pen and the mouse each keep their own tool. Tap a toolbar "
                                "button with the pen to set the pen's tool, click it with the mouse to set the mouse's "
                                "tool. A finger always pans and zooms."));

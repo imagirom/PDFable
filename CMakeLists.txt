@@ -65,6 +65,7 @@ add_executable(PDFable WIN32
   src/ui/Dialogs.cpp src/ui/Dialogs.h
   src/ui/Theme.cpp src/ui/Theme.h
   src/ui/Creator.cpp src/ui/Creator.h
+  src/ui/NotesPanel.cpp src/ui/NotesPanel.h
   resources/resources.qrc)
 if(WIN32)
   target_sources(PDFable PRIVATE resources/app.rc)
@@ -93,7 +94,7 @@ if(PDFABLE_TESTS)
   add_executable(pdfable_tests tests/tests.cpp
     src/ui/PdfView.cpp src/ui/PdfView.h src/ui/RenderWorker.cpp src/ui/RenderWorker.h
     src/ui/DocumentTab.cpp src/ui/DocumentTab.h src/ui/MainWindow.cpp src/ui/MainWindow.h
-    src/ui/Dialogs.cpp src/ui/Dialogs.h src/ui/Theme.cpp src/ui/Theme.h src/ui/Creator.cpp src/ui/Creator.h resources/resources.qrc)
+    src/ui/Dialogs.cpp src/ui/Dialogs.h src/ui/Theme.cpp src/ui/Theme.h src/ui/Creator.cpp src/ui/Creator.h src/ui/NotesPanel.cpp src/ui/NotesPanel.h resources/resources.qrc)
   target_include_directories(pdfable_tests PRIVATE src/ui)
   target_link_libraries(pdfable_tests PRIVATE pdfable_core Qt6::Widgets Qt6::PrintSupport Qt6::Network)
   target_compile_definitions(pdfable_tests PRIVATE PDFABLE_VERSION="${PROJECT_VERSION}")

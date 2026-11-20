@@ -7,6 +7,11 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QSettings>
+#ifdef Q_OS_WIN
+#define NOMINMAX
+#include <windows.h>
+#include <shlobj.h>
+#endif
 
 // One running PDFable: a second start (e.g. double-clicking a PDF in Explorer) hands its
 // files to the first one, which opens them as tabs.
@@ -15,6 +20,47 @@ static QString serverName()
     QString user = qEnvironmentVariable("USERNAME", qEnvironmentVariable("USER", "user"));
     return "PDFable-" + user;
 }
+
+#ifdef Q_OS_WIN
+// Windows remembers "Open with PDFable.exe" by file name only, under
+// HKCU\Software\Classes\Applications\PDFable.exe, and keeps the path of the first copy that was
+// ever chosen. When that copy is moved or deleted, double-clicking a PDF silently does nothing,
+// even after picking the new copy as default app. So every start points the registration at the
+// running executable (per user, no admin rights), and also registers a proper ProgID plus
+// Capabilities so that PDFable is listed under Settings > Apps > Default apps.
+static void registerFileAssociation()
+{
+    const QString exe = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
+    const QString command = "\"" + exe + "\" \"%1\"";
+    const QString icon = "\"" + exe + "\",0";
+    bool changed = false;
+    auto put = [&changed](QSettings &reg, const QString &key, const QString &value) {
+        if (!reg.contains(key) || reg.value(key).toString() != value) {
+            reg.setValue(key, value);
+            changed = true;
+        }
+    };
+    QSettings classes("HKEY_CURRENT_USER\\Software\\Classes", QSettings::NativeFormat);
+    put(classes, "Applications/PDFable.exe/shell/open/command/Default", command);
+    put(classes, "Applications/PDFable.exe/FriendlyAppName", "PDFable");
+    put(classes, "Applications/PDFable.exe/DefaultIcon/Default", icon);
+    put(classes, "Applications/PDFable.exe/SupportedTypes/.pdf", QString());
+    put(classes, "PDFable.Document/Default", "PDF document");
+    put(classes, "PDFable.Document/DefaultIcon/Default", icon);
+    put(classes, "PDFable.Document/shell/open/command/Default", command);
+    put(classes, ".pdf/OpenWithProgids/PDFable.Document", QString());
+    QSettings software("HKEY_CURRENT_USER\\Software", QSettings::NativeFormat);
+    put(software, "PDFable/Capabilities/ApplicationName", "PDFable");
+    put(software, "PDFable/Capabilities/ApplicationDescription", "PDF reader for pen devices");
+    put(software, "PDFable/Capabilities/FileAssociations/.pdf", "PDFable.Document");
+    put(software, "RegisteredApplications/PDFable", "Software\\PDFable\\Capabilities");
+    if (changed) {
+        classes.sync();
+        software.sync();
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    }
+}
+#endif
 
 static void raiseWindow(MainWindow *w)
 {
@@ -33,6 +79,9 @@ int main(int argc, char **argv)
     QCoreApplication::setAttribute(Qt::AA_CompressTabletEvents, false);
     QApplication app(argc, argv);
 
+#ifdef Q_OS_WIN
+    registerFileAssociation();
+#endif
     QStringList files;
     const QStringList args = app.arguments();
     bool creator = false;

@@ -48,29 +48,96 @@ Certificate-based signing (PAdES / CAdES with PKCS#12 IDs, timestamps, certifica
 in `src/core/Signer.cpp` but switched off by default. Enable it with `-DPDFABLE_SIGNING=ON` and the vcpkg feature
 `signing` (adds OpenSSL).
 
-## Development (WSL)
+## Building from source
 
-Development happens in WSL (Ubuntu) with the sources in this folder, which WSL sees as
-`/mnt/c/Users/<you>/Desktop/Claude/PDFable`. One script does everything:
+You get the same program on both systems: Windows produces a portable folder and zip, Ubuntu an
+AppImage. Both use Qt 6.8.3 and MuPDF 1.28.6. Pick the guide for your system; you don't need both.
 
-    cd /mnt/c/Users/<you>/Desktop/Claude/PDFable
-    ./dev.sh setup      # once: apt packages, Qt 6.8.3 (aqtinstall), MuPDF 1.28.6 from source
-    ./dev.sh build      # Linux build in ~/.cache/pdfable/build-linux
-    ./dev.sh test       # headless self-test
-    ./dev.sh run        # start PDFable; WSLg shows the window on the Windows desktop
-    ./dev.sh appimage   # dist/PDFable-<version>-x86_64.AppImage
-    ./dev.sh windows    # Windows build with Visual Studio, dist/PDFable-<version>-windows-x64.zip
-    ./dev.sh all        # all of the above
+### Windows 10/11 (64-bit)
 
-From Windows, double-clicking `wsl-dev.bat` (= `wsl-dev.bat setup all`) does the same without opening a WSL terminal (the Linux
-packages are installed as root, so no sudo password is asked).
+**1. Install the tools** (each once; accept the defaults unless noted):
 
-Both platforms use the same Qt (6.8.3) and MuPDF (1.28.6) versions. VS Code with the WSL extension
-picks up `CMakePresets.json` (preset "linux"), which points at the same folders as `dev.sh`.
+| Tool | Download | Notes |
+|---|---|---|
+| Git for Windows | https://git-scm.com/download/win | |
+| Visual Studio Build Tools 2022 or newer | https://visualstudio.microsoft.com/downloads/ (under "Tools for Visual Studio": **Build Tools for Visual Studio**) | In the installer tick the workload **"Desktop development with C++"**. It includes the compiler, CMake and Ninja. |
+| Python 3 | https://www.python.org/downloads/ | Tick **"Add python.exe to PATH"** on the first installer page. Only used to download Qt. |
 
-The Windows build needs Visual Studio 2022 Build Tools ("Desktop development with C++") and vcpkg in
-`C:\vcpkg`; Qt is downloaded automatically. `./dev.sh windows` runs `build.bat` through WSL interop;
-double-clicking `build.bat` on Windows does the same.
+**2. Set up vcpkg** (builds MuPDF). Open a Command Prompt (Start menu, type `cmd`) and run:
+
+    git clone https://github.com/microsoft/vcpkg C:\vcpkg
+    C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+If you put vcpkg somewhere else, set the environment variable `VCPKG_ROOT` to that folder.
+
+**3. Get the PDFable source code**, for example into your Documents folder:
+
+    cd %USERPROFILE%\Documents
+    git clone https://github.com/tobirieger/PDFable
+    cd PDFable
+
+**4. Build:** double-click `build.bat` in the PDFable folder (or type `build.bat` in the Command
+Prompt). A window opens and the progress is written to `build_log.txt`.
+
+- The **first** build takes about 10–20 minutes: it downloads Qt into `deps\Qt` and compiles MuPDF.
+  Later builds take 1–2 minutes.
+- When the window says `BUILD OK`, the program is in **`dist\PDFable\PDFable.exe`** (the creator is
+  `PDFable Creator.exe` next to it), and the same folder zipped is
+  `dist\PDFable-<version>-windows-x64.zip`. Copy the folder or the zip anywhere; nothing else needs
+  to be installed.
+- Close PDFable before building again; the build refuses to overwrite a running program.
+
+**If the build fails,** open `build_log.txt`; the last lines start with `ERROR:` and say what is missing.
+The common ones:
+
+| Message | What to do |
+|---|---|
+| `vswhere.exe not found` or `no Visual Studio 2022+ with the C++ x64 toolset` | Install the Build Tools, or open the Visual Studio Installer, click *Modify* and tick "Desktop development with C++". |
+| `cmake not found` / `ninja not found` | Visual Studio Installer → *Modify* → *Individual components* → tick "C++ CMake tools for Windows". |
+| `no Python found` | Install Python with "Add python.exe to PATH" ticked, then open a new Command Prompt. |
+| Qt download error (`RESULT=22`) | A download mirror timed out. Just run `build.bat` again. |
+| `vcpkg not found at C:\vcpkg` | Do step 2, or set `VCPKG_ROOT`. |
+| `PDFable is still running` | Close all PDFable windows and build again. |
+
+### Ubuntu (24.04 or newer, on a normal PC or in WSL)
+
+**1. Get the source code** (open a terminal):
+
+    sudo apt install -y git
+    git clone https://github.com/tobirieger/PDFable
+    cd PDFable
+
+**2. Install everything else** (once; asks for your password, takes about 5–15 minutes):
+
+    ./dev.sh setup
+
+This installs the compiler and libraries with `apt`, downloads Qt 6.8.3 into
+`~/.local/share/pdfable-deps` and compiles MuPDF there. Nothing outside your home folder is touched
+apart from the `apt` packages.
+
+**3. Build, test and start:**
+
+    ./dev.sh build      # compiles into ~/.cache/pdfable/build-linux
+    ./dev.sh test       # automatic self-test, should end with "ALL PASSED"
+    ./dev.sh run        # starts PDFable (./dev.sh creator starts the PDF creator)
+
+**4. Make the AppImage** (a single file you can copy to other Linux PCs):
+
+    ./dev.sh appimage   # creates dist/PDFable-<version>-x86_64.AppImage
+
+Logs of every step are in the `logs` folder. If `./dev.sh` says "Permission denied", run it as
+`bash dev.sh ...` instead. Other distributions work too if you install the build tools yourself;
+`./dev.sh setup` then skips `apt`, and `QT_DIR=/path/to/qt ./dev.sh build` uses an existing Qt 6.
+
+### Both versions from one Windows PC (WSL)
+
+To develop on Windows and build both versions, install Ubuntu in WSL (PowerShell as administrator:
+`wsl --install -d Ubuntu-24.04`), follow the Windows guide above, and keep the PDFable folder on the
+Windows drive. Then either double-click **`wsl-dev.bat`**, which runs the Ubuntu setup (no password
+needed), the Linux build and test, the AppImage and the Windows build in one go, or run
+`./dev.sh all` in Ubuntu inside the PDFable folder (it appears as `/mnt/c/Users/<you>/...`). With WSLg,
+`./dev.sh run` shows the Linux version as a normal window on the Windows desktop. VS Code with the WSL
+extension picks up `CMakePresets.json` (preset "linux"), which uses the same folders as `dev.sh`.
 
 ## Packages
 

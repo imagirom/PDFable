@@ -237,10 +237,11 @@ void NotesPanel::editNote(int page, int id)
 
 QPointF NotesPanel::anchorOf(const MarkupNote &n) const
 {
-    // left end of the first line of the marking, vertically centred
+    // bottom-left corner of the first line of the marking: the line then runs along the bottom
+    // of the text line instead of striking through the words next to the marking
     const QPolygonF &q = n.quads.isEmpty() ? QPolygonF(n.rect) : n.quads.first();
     QRectF r = q.boundingRect();
-    return QPointF(r.left(), r.center().y());
+    return QPointF(r.left(), r.bottom());
 }
 
 void NotesPanel::relayout()

@@ -481,7 +481,7 @@ int main(int argc, char **argv)
         if (c1 && c2) {
             QRectF q1;
             for (const MarkupNote &m : nd->markups()) if (m.id == id) q1 = m.quads.first().boundingRect();
-            QPoint anchor1 = np->mapFromGlobal(nv->viewport()->mapToGlobal(nv->pageToView(1, QPointF(q1.left(), q1.center().y())).toPoint()));
+            QPoint anchor1 = np->mapFromGlobal(nv->viewport()->mapToGlobal(nv->pageToView(1, QPointF(q1.left(), q1.bottom())).toPoint()));
             std::printf("     card1 y=%d anchor y=%d, card2 y=%d\n", c1->y(), anchor1.y(), c2->y());
             CHECK(std::abs(c1->y() + 14 - anchor1.y()) < 4 && c2->y() > c1->y() + c1->height());
         }

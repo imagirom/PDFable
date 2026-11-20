@@ -26,7 +26,7 @@ struct PenStyle {
 // Line from a marking to its note in the Notes sidebar (drawn from the marking to the left edge).
 struct NoteLink {
     int page = 0;
-    QPointF anchor;      // page coordinates: left end of the marking, vertically centred
+    QPointF anchor;      // page coordinates: bottom-left corner of the marking's first line
     QColor color;
 };
 

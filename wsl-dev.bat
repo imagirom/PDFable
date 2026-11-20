@@ -24,6 +24,6 @@ for %%c in (%ARGS%) do (
 )
 echo.
 if %RC%==0 (echo === finished) else (echo === FAILED - see the logs folder)
-echo %RC%> logs\wsl-dev.result
+>logs\wsl-dev.result echo %RC%
 if /i not "%PDFABLE_NOPAUSE%"=="1" pause
 exit /b %RC%

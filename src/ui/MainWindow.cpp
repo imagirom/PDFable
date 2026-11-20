@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "Creator.h"
+#include <mupdf/fitz/version.h>
 #include "Dialogs.h"
 #include "Theme.h"
 
@@ -322,6 +323,14 @@ void MainWindow::buildActions()
     add(sign, tr("&Create digital ID…"), {}, [this] { NewIdDialog(this).exec(); });
     add(sign, tr("Show &signatures"), {}, withTab([](DocumentTab *t) { t->showSignatures(); }));
 #endif
+
+    QMenu *help = menuBar()->addMenu(tr("&Help"));
+    add(help, tr("&About PDFable"), {}, [this] {
+        QMessageBox::about(this, tr("About PDFable"),
+                           tr("<h3>PDFable %1</h3><p>PDF reader with pen ink, signatures and a PDF creator.</p>"
+                              "<p>Qt %2, MuPDF %3</p><p>MuPDF is licensed under the GNU AGPL v3.</p>")
+                               .arg(QCoreApplication::applicationVersion(), QString::fromLatin1(qVersion()), QString::fromLatin1(FZ_VERSION)));
+    });
 
     add(edit, tr("Find &next"), QKeySequence::FindNext, withTab([](DocumentTab *t) { t->view()->findNext(true); }));
 

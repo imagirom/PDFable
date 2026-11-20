@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=PDFable Creator
+GenericName=PDF Merger
+Comment=Combine PDF files and images into one PDF
+Exec=PDFable --creator %F
+Icon=pdfable
+Terminal=false
+Categories=Office;Graphics;
+MimeType=application/pdf;image/png;image/jpeg;
+Keywords=pdf;merge;combine;join;pages;

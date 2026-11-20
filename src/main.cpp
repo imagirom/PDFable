@@ -28,6 +28,7 @@ int main(int argc, char **argv)
 {
     QCoreApplication::setOrganizationName("PDFable");
     QCoreApplication::setApplicationName("PDFable");
+    QCoreApplication::setApplicationVersion(PDFABLE_VERSION);
     QCoreApplication::setAttribute(Qt::AA_CompressHighFrequencyEvents, false);   // deliver every pen sample
     QCoreApplication::setAttribute(Qt::AA_CompressTabletEvents, false);
     QApplication app(argc, argv);

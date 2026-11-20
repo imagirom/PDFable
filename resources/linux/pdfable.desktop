@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=PDFable
+GenericName=PDF Reader
+Comment=Read, annotate and sign PDF files with pen and mouse
+Exec=PDFable %F
+Icon=pdfable
+Terminal=false
+Categories=Office;Viewer;Graphics;
+MimeType=application/pdf;
+Keywords=pdf;reader;annotate;sign;ink;
+StartupWMClass=PDFable

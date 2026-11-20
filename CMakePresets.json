@@ -1,0 +1,20 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "linux",
+      "displayName": "Linux / WSL (Qt and MuPDF from ./dev.sh setup)",
+      "generator": "Ninja",
+      "binaryDir": "$env{HOME}/.cache/pdfable/build-linux",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "$env{HOME}/.local/share/pdfable-deps/qt/6.8.3/gcc_64",
+        "MUPDF_ROOT": "$env{HOME}/.local/share/pdfable-deps/mupdf-1.28.6",
+        "PDFABLE_TESTS": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    }
+  ],
+  "buildPresets": [ { "name": "linux", "configurePreset": "linux" } ]
+}

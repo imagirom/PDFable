@@ -40,25 +40,39 @@ Certificate-based signing (PAdES / CAdES with PKCS#12 IDs, timestamps, certifica
 in `src/core/Signer.cpp` but switched off by default. Enable it with `-DPDFABLE_SIGNING=ON` and the vcpkg feature
 `signing` (adds OpenSSL).
 
-## Build on Windows
+## Development (WSL)
 
-1. Visual Studio 2022 Build Tools with "Desktop development with C++" (includes CMake and Ninja).
-2. Qt 6.5 or newer, MSVC 2022 64-bit kit (Qt online installer, or `pip install aqtinstall` and
-   `aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -O C:\Qt`).
-3. vcpkg: `git clone https://github.com/microsoft/vcpkg C:\vcpkg` and `C:\vcpkg\bootstrap-vcpkg.bat`.
-4. In a "x64 Native Tools Command Prompt for VS 2022":
+Development happens in WSL (Ubuntu) with the sources in this folder, which WSL sees as
+`/mnt/c/Users/<you>/Desktop/Claude/PDFable`. One script does everything:
 
-       powershell -ExecutionPolicy Bypass -File build.ps1 -QtDir C:\Qt\6.8.3\msvc2022_64 -Vcpkg C:\vcpkg
+    cd /mnt/c/Users/<you>/Desktop/Claude/PDFable
+    ./dev.sh setup      # once: apt packages, Qt 6.8.3 (aqtinstall), MuPDF 1.28.6 from source
+    ./dev.sh build      # Linux build in ~/.cache/pdfable/build-linux
+    ./dev.sh test       # headless self-test
+    ./dev.sh run        # start PDFable; WSLg shows the window on the Windows desktop
+    ./dev.sh appimage   # dist/PDFable-<version>-x86_64.AppImage
+    ./dev.sh windows    # Windows build with Visual Studio, dist/PDFable-<version>-windows-x64.zip
+    ./dev.sh all        # all of the above
 
-   The first run compiles MuPDF through vcpkg (several minutes). The result is `build\PDFable.exe`.
+Both platforms use the same Qt (6.8.3) and MuPDF (1.28.6) versions. VS Code with the WSL extension
+picks up `CMakePresets.json` (preset "linux"), which points at the same folders as `dev.sh`.
 
-On Linux: `cmake -B build -DMUPDF_ROOT=<mupdf prefix> && cmake --build build`.
+The Windows build needs Visual Studio 2022 Build Tools ("Desktop development with C++") and vcpkg in
+`C:\vcpkg`; Qt is downloaded automatically. `./dev.sh windows` runs `build.bat` through WSL interop;
+double-clicking `build.bat` on Windows does the same.
+
+## Packages
+
+- **Windows:** `dist\PDFable-<version>-windows-x64.zip`. Unzip anywhere and start `PDFable.exe`, or
+  `PDFable Creator.exe` for the creator. Nothing to install: Qt and the Visual C++ runtime are inside.
+  The unpacked folder is also in `dist\PDFable`.
+- **Linux:** `dist/PDFable-<version>-x86_64.AppImage`. `chmod +x` it and run it on any distribution
+  at least as new as the one it was built on. `PDFable-*.AppImage --creator` opens the creator.
 
 ## Status
 
-Developed and tested on Linux against MuPDF 1.28.6 and Qt 6.4 with an automated headless test
-(`tests/tests.cpp`, build with `-DPDFABLE_TESTS=ON`, run `pdfable_tests tests/sample.pdf out`). The Windows
-build and real pen hardware have not been tested yet.
+Automated headless test in `tests/tests.cpp` (`./dev.sh test`). Pen and touch input are tested by hand on
+Windows.
 
 Known gaps: text selection is per page; form filling is not
 implemented; extracting or merging pages keeps ink and comments but drops links and form fields; saving

@@ -1,13 +1,15 @@
 @echo off
-rem PDFable one-click build. Double-click this file; everything is logged to build_log.txt.
+rem PDFable Windows build. Double-click this file, or run "./dev.sh windows" in WSL.
+rem Everything is logged to build_log.txt. Result: dist\PDFable\PDFable.exe and
+rem dist\PDFable-<version>-windows-x64.zip (portable, runs without installation).
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
-echo Building PDFable... this window closes itself when done. Progress: build_log.txt
+echo Building PDFable... progress is written to build_log.txt
 call :main > build_log.txt 2>&1
 set RC=%ERRORLEVEL%
-if %RC%==0 (echo BUILD OK: build\PDFable.exe) else (echo BUILD FAILED, see build_log.txt)
+if %RC%==0 (echo BUILD OK: dist\PDFable\PDFable.exe) else (echo BUILD FAILED, see build_log.txt)
 echo RESULT=%RC%>> build_log.txt
-pause
+if /i not "%~1"=="nopause" pause
 exit /b %RC%
 
 :main
@@ -66,9 +68,27 @@ rem ---- 4. configure + build
 if errorlevel 1 (echo ERROR: configure failed & exit /b 40)
 "%CMAKE%" --build build
 if errorlevel 1 (echo ERROR: compile failed & exit /b 41)
-"%QTDIR%\bin\windeployqt.exe" --release --no-translations build\PDFable.exe
+rem ---- 5. portable folder: dist\PDFable with Qt, plugins and the VC++ runtime next to the exe
+set "STAGE=%~dp0dist\PDFable"
+if exist "%STAGE%" rmdir /s /q "%STAGE%"
+if exist "%STAGE%" (echo ERROR: cannot clear dist\PDFable - is PDFable running from there? & exit /b 43)
+"%CMAKE%" --install build --prefix "%STAGE%"
+if errorlevel 1 (echo ERROR: install step failed & exit /b 44)
+"%QTDIR%\bin\windeployqt.exe" --release --no-translations --no-compiler-runtime --no-opengl-sw --no-system-d3d-compiler --skip-plugin-types tls,networkinformation "%STAGE%\PDFable.exe"
 if errorlevel 1 (echo ERROR: windeployqt failed & exit /b 42)
-rem shortcut that starts the PDF creator directly
-powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%~dp0build\PDFable Creator.lnk');$s.TargetPath='%~dp0build\PDFable.exe';$s.Arguments='--creator';$s.IconLocation='%~dp0build\PDFable.exe';$s.Save()"
+set "CRT="
+for /d %%d in ("%VCToolsRedistDir%x64\Microsoft.VC14*.CRT") do set "CRT=%%d"
+if not defined CRT (echo ERROR: VC++ runtime DLLs not found under "%VCToolsRedistDir%" & exit /b 45)
+copy /y "%CRT%\*.dll" "%STAGE%\" >nul
+echo VC++ runtime: %CRT%
+
+rem ---- 6. zip
+set "VER="
+for /f "tokens=2 delims==" %%v in ('findstr /b /c:"CMAKE_PROJECT_VERSION:STATIC" build\CMakeCache.txt') do set "VER=%%v"
+set "ZIP=%~dp0dist\PDFable-%VER%-windows-x64.zip"
+if exist "%ZIP%" del /q "%ZIP%"
+powershell -NoProfile -Command "Compress-Archive -Path '%STAGE%' -DestinationPath '%ZIP%' -CompressionLevel Optimal"
+if errorlevel 1 (echo ERROR: could not create the zip & exit /b 46)
+echo Portable package: %ZIP%
 echo === BUILD OK
 exit /b 0

@@ -2,6 +2,16 @@
 
 A PDF reader and annotator for Windows pen devices, written in C++17 with Qt 6 Widgets and MuPDF.
 
+![PDFable with three highlighted passages, their notes in the Notes sidebar connected by fine lines, and a
+red pen loop drawn around an equation](docs/screenshot.png)
+
+*Highlights in several colours, each with a note in the Notes sidebar at the height of its marking, and
+freehand pen ink.*
+
+![The same document with the Pages sidebar showing page previews that include the markings](docs/screenshot-pages.png)
+
+*The Pages sidebar shows a preview of every page, markings included; drag them to reorder pages.*
+
 ## What it does
 
 - **Reading**: continuous scrolling, zoom (Ctrl+wheel, pinch, fit width/page), outline sidebar, text search,

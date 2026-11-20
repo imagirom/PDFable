@@ -99,4 +99,11 @@ if(PDFABLE_TESTS)
   target_include_directories(pdfable_tests PRIVATE src/ui)
   target_link_libraries(pdfable_tests PRIVATE pdfable_core Qt6::Widgets Qt6::PrintSupport Qt6::Network)
   target_compile_definitions(pdfable_tests PRIVATE PDFABLE_VERSION="${PROJECT_VERSION}")
+  # renders docs/screenshot.png for the README (see tests/screenshot.cpp)
+  add_executable(pdfable_screenshot tests/screenshot.cpp
+    src/ui/PdfView.cpp src/ui/RenderWorker.cpp src/ui/DocumentTab.cpp src/ui/MainWindow.cpp
+    src/ui/Dialogs.cpp src/ui/Theme.cpp src/ui/Creator.cpp src/ui/NotesPanel.cpp resources/resources.qrc)
+  target_include_directories(pdfable_screenshot PRIVATE src/ui)
+  target_link_libraries(pdfable_screenshot PRIVATE pdfable_core Qt6::Widgets Qt6::PrintSupport Qt6::Network)
+  target_compile_definitions(pdfable_screenshot PRIVATE PDFABLE_VERSION="${PROJECT_VERSION}")
 endif()

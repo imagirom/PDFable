@@ -54,7 +54,7 @@ Development happens in WSL (Ubuntu) with the sources in this folder, which WSL s
     ./dev.sh windows    # Windows build with Visual Studio, dist/PDFable-<version>-windows-x64.zip
     ./dev.sh all        # all of the above
 
-From Windows, `wsl-dev.bat setup all` does the same without opening a WSL terminal (the Linux
+From Windows, double-clicking `wsl-dev.bat` (= `wsl-dev.bat setup all`) does the same without opening a WSL terminal (the Linux
 packages are installed as root, so no sudo password is asked).
 
 Both platforms use the same Qt (6.8.3) and MuPDF (1.28.6) versions. VS Code with the WSL extension

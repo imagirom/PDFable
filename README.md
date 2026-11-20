@@ -89,7 +89,8 @@ resets the undo history.
 V select, H hand, P pen, M highlighter, E eraser, T text box, Ctrl+F find, Ctrl+H highlight selection,
 Ctrl+Shift+H handwritten signature, F4 sidebar, Ctrl+1/2/0 fit page / fit width / 100 %, Alt+Left/Right history.
 
-## Licence note
+## Licence
 
-MuPDF is AGPL-3.0 (or commercial). That is fine for personal use; distributing binaries means publishing the
-source under AGPL-compatible terms.
+PDFable is free software under the GNU Affero General Public License v3.0 or later (see `LICENSE`).
+It is built on MuPDF (AGPL-3.0) and Qt (LGPL-3.0); anyone you give PDFable to is entitled to its source
+code, which this repository provides.

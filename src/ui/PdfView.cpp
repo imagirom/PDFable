@@ -804,7 +804,7 @@ void PdfView::mouseDoubleClickEvent(QMouseEvent *e)
     if (hit && a.kind == AnnotKind::FreeText) {
         clearAnnotSelection();
         beginTextEdit(pg, pt, &a);
-    } else if (int id = isPreview_ ? 0 : hit && a.kind == AnnotKind::Note ? a.id : markupAt(pg, pt))
+    } else if (int id = isPreview_ ? 0 : hit && (a.kind == AnnotKind::Note || a.kind == AnnotKind::Ink) ? a.id : markupAt(pg, pt))
         emit noteRequested(pg, id);
 }
 
@@ -870,6 +870,8 @@ void PdfView::contextMenuEvent(QContextMenuEvent *e)
         for (int i = as.size() - 1; i >= 0; --i)
             if (as[i].rect.contains(pt)) {
                 int id = as[i].id;
+                if (!isPreview_ && (isMarkup(as[i].kind) || as[i].kind == AnnotKind::Note || as[i].kind == AnnotKind::Ink))
+                    m.addAction(as[i].text.isEmpty() ? tr("Add note") : tr("Edit note"), this, [this, pg, id] { emit noteRequested(pg, id); });
                 m.addAction(tr("Delete annotation"), this, [this, pg, id] {
                     clearAnnotSelection();
                     try { doc_->removeAnnots(pg, {id}); } catch (const PdfError &err) { emit statusMessage(err.message()); }
@@ -1120,7 +1122,7 @@ void PdfView::release(const Ptr &e)
         pressMarkupId_ = 0;
         break;
     case Drag::AnnotMove:
-        if (ann_.kind == AnnotKind::Note && annDragRect_ == ann_.rect) {     // a tap on a sticky note, not a drag
+        if ((ann_.kind == AnnotKind::Note || ann_.kind == AnnotKind::Ink) && annDragRect_ == ann_.rect) {   // a tap, not a drag
             if (secondTap(ann_.id, e) && !isPreview_) emit noteRequested(annPage_, ann_.id);
         } else
             applyAnnotDrag(false);

@@ -65,14 +65,14 @@ struct AnnotInfo {
     int id = 0;
     AnnotKind kind = AnnotKind::Other;
     QRectF rect;
-    QString text;        // FreeText: its text; markups and sticky notes: the note
+    QString text;        // FreeText: its text; markups, sticky notes and ink: the note
     float fontSize = 0;  // FreeText only
     QColor color;        // FreeText: text colour; markups: highlight colour; sticky notes: icon colour
     QVector<QPolygonF> quads;   // markups (highlight, underline, strike-out)
 };
 
-// A text marking (highlight, underline, strike-out) and the note attached to it, or a sticky
-// note (an icon anywhere on the page, standing for its note).
+// A text marking (highlight, underline, strike-out) or a pen stroke and the note attached to it,
+// or a sticky note (an icon anywhere on the page, standing for its note).
 struct MarkupNote {
     int page = 0;
     int id = 0;
@@ -167,7 +167,8 @@ public:
     QString selectionText(int page, QPointF a, QPointF b);
     QVector<QPolygonF> search(int page, const QString &needle);
     QVector<AnnotInfo> annots(int page);
-    QVector<MarkupNote> markups();                       // whole document, quick (no page loading)
+    // Whole document, quick (no page loading). Of the pen strokes only those with a note, and withId.
+    QVector<MarkupNote> markups(int withId = 0);
     QString textInQuads(int page, const QVector<QPolygonF> &quads);
     QVector<FieldInfo> fields(int page);
     QVector<InkAnnot> inkAnnots(int page);

@@ -52,6 +52,9 @@ freehand pen ink.*
   told apart. A long note scrolls inside its card.
   Preferences decide whether the note editor opens right after marking or only on a double-click.
   Notes are stored as standard PDF annotation comments, so other PDF readers show them too.
+- **Notes on pen strokes**: double-click a pen or highlighter stroke with the Select tool (or right-click
+  it, "Add note") to give it a note in the Notes sidebar. The note belongs to that one stroke: it moves
+  with it and is removed with it, also by the eraser. Stored as the comment of the ink annotation.
 - **Sticky notes**: pick the Note tool (N) and click anywhere on the page, or right-click and choose "Add
   note here": an icon marks the spot and its note is written in the Notes sidebar, like the note of a
   marking. Click the icon to select it, drag it to move it, double-click it to edit the note; Del removes

@@ -619,6 +619,7 @@ QVector<AnnotInfo> Document::annots(int page)
                     ai.id = annotId(c, a);
                     ai.kind = kindOf(pdf_annot_type(c, a));
                     ai.rect = qr(pdf_bound_annot(c, a));
+                    if (ai.kind == AnnotKind::Ink) ai.text = QString::fromUtf8(pdf_annot_contents(c, a));
                     if (ai.kind == AnnotKind::FreeText) {
                         ai.text = QString::fromUtf8(pdf_annot_contents(c, a));
                         const char *font = nullptr;
@@ -816,7 +817,7 @@ void Document::setAnnotContents(int page, int id, const QString &text)
 
 // Reads the markings straight from the page dictionaries: much faster than loading every page,
 // which matters for long documents because the notes sidebar needs all of them.
-QVector<MarkupNote> Document::markups()
+QVector<MarkupNote> Document::markups(int withId)
 {
     std::lock_guard<std::recursive_mutex> lk(mu_);
     QVector<MarkupNote> out;
@@ -840,10 +841,13 @@ QVector<MarkupNote> Document::markups()
                     else if (pdf_name_eq(c, st, PDF_NAME(Underline))) m.kind = AnnotKind::Underline;
                     else if (pdf_name_eq(c, st, PDF_NAME(StrikeOut))) m.kind = AnnotKind::StrikeOut;
                     else if (pdf_name_eq(c, st, PDF_NAME(Text)) && !pdf_dict_get(c, ref, PDF_NAME(IRT))) m.kind = AnnotKind::Note;   // not replies
+                    else if (pdf_name_eq(c, st, PDF_NAME(Ink))) m.kind = AnnotKind::Ink;
                     else continue;
                     m.page = i;
                     m.id = pdf_to_num(c, ref);
                     if (m.id <= 0) continue;
+                    // a handwritten page has hundreds of strokes: only the few that carry a note
+                    if (m.kind == AnnotKind::Ink && m.id != withId && !pdf_dict_get(c, ref, PDF_NAME(Contents))) continue;
                     m.rect = qr(fz_transform_rect(pdf_to_rect(c, pdf_dict_get(c, ref, PDF_NAME(Rect))), ctm));
                     m.text = QString::fromUtf8(pdf_dict_get_text_string(c, ref, PDF_NAME(Contents)));
                     pdf_obj *col = pdf_dict_get(c, ref, PDF_NAME(C));

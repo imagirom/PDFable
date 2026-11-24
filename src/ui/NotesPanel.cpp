@@ -233,7 +233,7 @@ int NotesPanel::noteCount() const
 
 QString NotesPanel::excerptFor(const MarkupNote &n)
 {
-    if (n.kind == AnnotKind::Note) return QString();     // a sticky note marks no text
+    if (n.kind == AnnotKind::Note || n.kind == AnnotKind::Ink) return QString();     // these mark no text
     auto it = excerpts_.find(n.id);
     if (it == excerpts_.end()) it = excerpts_.insert(n.id, doc_->textInQuads(n.page, n.quads));
     return it.value();
@@ -241,7 +241,7 @@ QString NotesPanel::excerptFor(const MarkupNote &n)
 
 void NotesPanel::reload()
 {
-    QVector<MarkupNote> all = doc_->markups();
+    QVector<MarkupNote> all = doc_->markups(editingId_);
     notes_.clear();
     QSet<int> keep;
     for (const MarkupNote &m : std::as_const(all)) {

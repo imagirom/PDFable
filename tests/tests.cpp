@@ -636,6 +636,57 @@ int main(int argc, char **argv)
         nt->window()->grab().save(out + "/9d_sticky.png");
     }
 
+    // notes on pen strokes: a double-click opens the note of a stroke; it stays with the stroke and goes with it
+    {
+        DocumentTab *nt = w->currentTab();
+        PdfView *nv = nt->view();
+        Document *nd = nt->doc();
+        NotesPanel *np = nt->notesPanel();
+        const int before = np->noteCount();
+        InkData k;
+        InkStroke st;
+        for (int j = 0; j <= 20; ++j) st.pts.push_back(QPointF(380 + j * 5, 470 + 6 * std::sin(j * 0.6)));
+        k.strokes.push_back(st);
+        k.color = QColor(200, 30, 30);
+        k.width = 2;
+        nv->flushInk();
+        int ink = nd->addInk(1, k);
+        wait(300);
+        CHECK(ink > 0 && !np->card(ink) && np->noteCount() == before);     // no note, no card
+        auto noteOf = [&](int id) {
+            for (const AnnotInfo &a : nd->annots(1)) if (a.id == id) return a.text;
+            return QString("(gone)");
+        };
+        w->setTool(Tool::Select);
+        QPointF on = nv->pageToView(1, st.pts[10]);
+        QMouseEvent dbl(QEvent::MouseButtonDblClick, on, nv->viewport()->mapToGlobal(on), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(nv->viewport(), &dbl);
+        wait(50);
+        NoteCard *ic = np->card(ink);
+        CHECK(ic && ic->isEditing());
+        if (ic) {
+            auto *ed = ic->findChild<QPlainTextEdit *>();
+            ed->setPlainText("Sign error here?");
+            QKeyEvent done(QEvent::KeyPress, Qt::Key_Return, Qt::ControlModifier);
+            QApplication::sendEvent(ed, &done);
+        }
+        wait(300);
+        CHECK(noteOf(ink) == "Sign error here?" && np->noteCount() == before + 1);
+        QRectF r0;
+        for (const AnnotInfo &a : nd->annots(1)) if (a.id == ink) r0 = a.rect;
+        nv->testPointer(0, on, -1, 50000);
+        nv->testPointer(1, on + QPointF(40, 30), -1, 50010);
+        nv->testPointer(2, on + QPointF(40, 30), -1, 50020);
+        wait(300);
+        QRectF r1;
+        for (const AnnotInfo &a : nd->annots(1)) if (a.id == ink) r1 = a.rect;
+        CHECK(r1.x() > r0.x() + 5 && noteOf(ink) == "Sign error here?" && np->card(ink));     // moved, note kept
+        nt->window()->grab().save(out + "/9e_stroke_note.png");
+        nd->removeAnnots(1, {ink});                          // what the eraser does
+        wait(300);
+        CHECK(!np->card(ink) && np->noteCount() == before);
+    }
+
     // fillable forms: type in place, Tab to the next field, checkbox, saved values
     {
         QFile::remove(out + "/form.pdf");

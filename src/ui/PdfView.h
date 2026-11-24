@@ -30,8 +30,10 @@ struct NoteLink {
     QPointF anchor;      // page coordinates: bottom-left corner of the marking's first line
     QColor color;        // grey, or the marking's colour if lit
     QVector<QPolygonF> quads;     // page coordinates
-    bool lit = false;    // its note is edited or under the pointer: the marking gets a boundary
+    bool lit = false;    // its note is edited, selected or under the pointer: the marking gets a boundary
 };
+// The colour of a marking for its boundary and for the line of its lit note.
+QColor noteLineColor(const QColor &marking);
 
 struct ViewState {
     double zoom = 0;   // 0 = unknown
@@ -98,6 +100,7 @@ public:
     void setNoteLinks(const QVector<NoteLink> &links) { noteLinks_ = links; viewport()->update(); }
     void setNoteLinksVisible(bool on) { if (on != noteLinksVisible_) { noteLinksVisible_ = on; viewport()->update(); } }
     void deleteSelectedAnnot();
+    void selectAnnot(int page, int id);          // from outside, e.g. the Notes sidebar; unknown id = none
 
     // modes started from dialogs
     void startPlacingInk(const ink::InkData &d, double widthPt);
@@ -123,6 +126,7 @@ signals:
     void viewChanged();                          // scrolled, zoomed or re-laid out
     void noteRequested(int page, int annotId);   // open the note of a marking
     void noteHovered(int annotId);               // pointer over a marking with a note (0 = left it)
+    void noteSelected(int annotId);              // the selected annotation (0 = none)
 
 protected:
     void paintEvent(QPaintEvent *e) override;
@@ -193,6 +197,8 @@ private:
     void showPreview();
     void hidePreview();
     bool annotAt(int page, QPointF pt, ink::AnnotInfo *out);
+    int markupAt(int page, QPointF pt);          // text marking under a point (0 = none)
+    void clickMarkup(int page, int id, const Ptr &e);
     void selectAnnot(int page, const ink::AnnotInfo &a);
     void clearAnnotSelection();
     void applyAnnotDrag(bool resized);
@@ -214,6 +220,8 @@ private:
     bool noteLinksVisible_ = false;
     int hoverNote_ = 0;
     int pressMarkupPage_ = -1, pressMarkupId_ = 0;
+    int tapMarkupId_ = 0;        // pen: the marking tapped last, to recognise a second tap
+    qint64 tapMarkupT_ = 0;
     PenStyle pen_, hl_{QColor(255, 235, 60), 12.f};
     double zoom_ = 1.0;
     QVector<QRectF> pageRects_;

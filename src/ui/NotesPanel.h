@@ -20,14 +20,15 @@ public:
     const ink::MarkupNote &note() const { return note_; }
     void startEditing();
     bool isEditing() const { return editing_; }
-    void setHovered(bool on);            // the pointer is on the card or on its marking
-    bool isLit() const { return editing_ || hovered_; }   // shows the colour of its marking
+    void setLit(bool on);                // its marking is selected, or the pointer is on either
+    bool isLit() const { return editing_ || lit_; }      // shows the colour of its marking
     void fitWidth(int w);                // also sets the height: grows with the note, a long one scrolls
 signals:
     void committed(int page, int id, const QString &text);
     void cancelled(int id);
     void deleteMarking(int page, int id);
     void heightChanged();
+    void editingStarted();
     void hovered(bool on);
 protected:
     void enterEvent(QEnterEvent *e) override;
@@ -42,7 +43,7 @@ private:
     ink::MarkupNote note_;
     QLabel *excerpt_;
     QPlainTextEdit *edit_;               // shows the note and edits it, so both look the same
-    bool editing_ = false, hovered_ = false;
+    bool editing_ = false, lit_ = false;
     int fitted_ = 0;                     // width the height was computed for (0 = compute again)
 };
 
@@ -61,7 +62,7 @@ protected:
 private:
     void relayout();
     void updateLinks();
-    void setHovered(int id);             // the note under the pointer (0 = none)
+    void updateLit();                    // after the hovered or the selected note changed
     QPointF anchorOf(const ink::MarkupNote &n) const;
     QString excerptFor(const ink::MarkupNote &n);
 
@@ -71,6 +72,6 @@ private:
     QHash<int, NoteCard *> cards_;
     QHash<int, QString> excerpts_;
     QVector<QPair<qreal, NoteCard *>> placed_;   // anchor y in panel coordinates, card
-    int editingId_ = 0, hoveredId_ = 0;
+    int editingId_ = 0, hoveredId_ = 0, selectedId_ = 0;
     bool active_ = false;
 };

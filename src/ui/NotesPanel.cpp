@@ -21,15 +21,6 @@ static const int kMaxLines = 8; // a longer note scrolls inside its card
 // Lines of notes that are not lit: a grey that reads on light, sepia and dark paper.
 static const QColor kIdleLine(128, 128, 128, 110);
 
-// The colour of a marking for the line and outlines of its lit note: the same hue, deep and
-// saturated. Mid lightness shows on light and on dark paper alike; darker() would turn yellow olive.
-static QColor lineColor(const QColor &c)
-{
-    float h, s, l;
-    c.getHslF(&h, &s, &l);
-    return QColor::fromHslF(h, s < 0.1f ? s : qMax(s, 0.85f), 0.42f);
-}
-
 // Height of plain text wrapped to a width, laid out the way QPlainTextEdit does it (which does
 // not report a height in pixels itself).
 static int textHeight(const QString &text, const QFont &font, int width)
@@ -120,7 +111,7 @@ void NoteCard::paintEvent(QPaintEvent *)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-    p.setPen(QPen(isLit() ? lineColor(note_.color) : palette().color(QPalette::Mid), isLit() ? 1.5 : 1));
+    p.setPen(QPen(isLit() ? noteLineColor(note_.color) : palette().color(QPalette::Mid), isLit() ? 1.5 : 1));
     p.setBrush(palette().color(QPalette::Base));
     p.drawRoundedRect(r, 7, 7);
     p.setPen(Qt::NoPen);
@@ -141,10 +132,10 @@ void NoteCard::setEditing(bool on)
     update();
 }
 
-void NoteCard::setHovered(bool on)
+void NoteCard::setLit(bool on)
 {
-    if (on == hovered_) return;
-    hovered_ = on;
+    if (on == lit_) return;
+    lit_ = on;
     update();
 }
 
@@ -166,6 +157,7 @@ void NoteCard::startEditing()
         setEditing(true);
         fitWidth(width());
         emit heightChanged();
+        emit editingStarted();
     }
     edit_->setFocus();
     edit_->moveCursor(QTextCursor::End);
@@ -228,7 +220,8 @@ NotesPanel::NotesPanel(std::shared_ptr<Document> doc, PdfView *view, QWidget *pa
     setBackgroundRole(QPalette::Window);
     setMinimumWidth(170);
     connect(view_, &PdfView::viewChanged, this, &NotesPanel::relayout);
-    connect(view_, &PdfView::noteHovered, this, &NotesPanel::setHovered);
+    connect(view_, &PdfView::noteHovered, this, [this](int id) { hoveredId_ = id; updateLit(); });
+    connect(view_, &PdfView::noteSelected, this, [this](int id) { selectedId_ = id; updateLit(); });
 }
 
 int NotesPanel::noteCount() const
@@ -259,9 +252,14 @@ void NotesPanel::reload()
             c = new NoteCard(m, excerptFor(m), this);
             cards_.insert(m.id, c);
             connect(c, &NoteCard::heightChanged, this, &NotesPanel::relayout);
+            // the note being written is the selected one: a marking selected before must not stay lit
+            connect(c, &NoteCard::editingStarted, this, [this, c] { view_->selectAnnot(c->note().page, c->note().id); });
             connect(c, &NoteCard::hovered, this, [this, id = m.id](bool on) {
-                if (on || hoveredId_ == id) setHovered(on ? id : 0);
+                if (!on && hoveredId_ != id) return;
+                hoveredId_ = on ? id : 0;
+                updateLit();
             });
+            c->setLit(m.id == hoveredId_ || m.id == selectedId_);
             connect(c, &NoteCard::committed, this, [this](int page, int id, const QString &text) {
                 if (editingId_ == id) editingId_ = 0;
                 try {
@@ -349,24 +347,22 @@ void NotesPanel::relayout()
 
 void NotesPanel::updateLinks()
 {
-    // grey, so that lines at the same height cannot be confused; only a lit note (edited, or
-    // under the pointer) shows its colour, and comes last to be drawn on top
+    // grey, so that lines at the same height cannot be confused; only a lit note (edited, selected
+    // or under the pointer) shows its colour, and comes last to be drawn on top
     QVector<NoteLink> links, lit;
     for (const MarkupNote &m : std::as_const(notes_)) {
         NoteCard *c = cards_.value(m.id);
         if (!c) continue;
-        if (c->isLit()) lit.push_back({m.page, m.id, anchorOf(m), lineColor(m.color), m.quads, true});
+        if (c->isLit()) lit.push_back({m.page, m.id, anchorOf(m), noteLineColor(m.color), m.quads, true});
         else links.push_back({m.page, m.id, anchorOf(m), kIdleLine, m.quads, false});
     }
     view_->setNoteLinks(links + lit);
     view_->setNoteLinksVisible(active_ && isVisible());
 }
 
-void NotesPanel::setHovered(int id)
+void NotesPanel::updateLit()
 {
-    if (id == hoveredId_) return;
-    hoveredId_ = id;
-    for (auto it = cards_.cbegin(); it != cards_.cend(); ++it) it.value()->setHovered(it.key() == id);
+    for (auto it = cards_.cbegin(); it != cards_.cend(); ++it) it.value()->setLit(it.key() == hoveredId_ || it.key() == selectedId_);
     updateLinks();
     update();
 }
@@ -400,7 +396,7 @@ void NotesPanel::paintEvent(QPaintEvent *)
         for (const auto &pc : std::as_const(placed_)) {
             NoteCard *c = pc.second;
             if (c->isLit() != lit) continue;
-            p.setPen(QPen(lit ? lineColor(c->note().color) : kIdleLine, 1.2));
+            p.setPen(QPen(lit ? noteLineColor(c->note().color) : kIdleLine, 1.2));
             qreal y = pc.first, cy = c->y() + 14, right = width();
             QPointF elbow(right - kSide / 2.0, y);
             p.drawLine(QPointF(right, y), elbow);

@@ -18,6 +18,7 @@
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QTabWidget>
+#include <QTabletEvent>
 #include <QToolButton>
 #include <QTimer>
 #include <cmath>
@@ -481,6 +482,10 @@ int main(int argc, char **argv)
         nv->testPointer(0, c, -1, 32000);
         nv->testPointer(2, c, -1, 32010);
         wait(50);
+        CHECK(!np->card(id2));                            // a click only selects the marking
+        QMouseEvent dbl(QEvent::MouseButtonDblClick, c, nv->viewport()->mapToGlobal(c), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(nv->viewport(), &dbl);
+        wait(50);
         CHECK(np->card(id2) && np->card(id2)->isEditing());
         if (np->card(id2)) {
             auto *ed2 = np->card(id2)->findChild<QPlainTextEdit *>();
@@ -499,8 +504,12 @@ int main(int argc, char **argv)
             std::printf("     card1 y=%d anchor y=%d, card2 y=%d\n", c1->y(), anchor1.y(), c2->y());
             CHECK(std::abs(c1->y() + 14 - anchor1.y()) < 4 && c2->y() > c1->y() + c1->height());
         }
-        // the pointer on a marking, or on a card, lights the note up
+        // a selected marking lights its note up, and so does the pointer on a marking or on a card
         if (c1 && c2) {
+            CHECK(!c1->isLit() && c2->isLit());           // the second marking is still selected
+            QPointF off = nv->pageToView(1, QPointF(40, 330));
+            nv->testPointer(0, off, -1, 32500);
+            nv->testPointer(2, off, -1, 32510);
             CHECK(!c1->isLit() && !c2->isLit());
             QPointF on = nv->pageToView(1, QPointF(150, 421));
             QMouseEvent mv(QEvent::MouseMove, on, nv->viewport()->mapToGlobal(on), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
@@ -509,6 +518,49 @@ int main(int argc, char **argv)
             QEvent leave(QEvent::Leave);
             QApplication::sendEvent(nv, &leave);
             CHECK(!c2->isLit());
+            // the pen (holding the select tool): one tap selects the marking, a second tap opens the editor
+            QPointF m1 = nv->pageToView(1, QPointF(150, 258));
+            QTabletEvent near(QEvent::TabletMove, QPointingDevice::primaryPointingDevice(), m1, nv->viewport()->mapToGlobal(m1),
+                              0, 0, 0, 0, 0, 0, Qt::NoModifier, Qt::NoButton, Qt::NoButton);
+            QApplication::sendEvent(nv->viewport(), &near);
+            w->setTool(Tool::Select);
+            nv->testPointer(0, m1, 0.5f, 33000, true);
+            nv->testPointer(2, m1, 0, 33010, true);
+            CHECK(c1->isLit() && !c1->isEditing());
+            nv->testPointer(0, m1, 0.5f, 33200, true);
+            nv->testPointer(2, m1, 0, 33210, true);
+            wait(50);
+            CHECK(c1->isEditing());
+            QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+            QApplication::sendEvent(c1->findChild<QPlainTextEdit *>(), &esc);
+            wait(100);
+            // Del removes the selected marking, and its note with it
+            CHECK(c1->isLit() && !c1->isEditing());
+            QKeyEvent del(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
+            QApplication::sendEvent(nv, &del);
+            wait(400);
+            CHECK(!np->card(id) && np->noteCount() == 1);
+            nt->undo();
+            wait(400);
+            CHECK(np->noteCount() == 2);
+            nv->testPointer(0, off, -1, 34000);           // back to the mouse
+            nv->testPointer(2, off, -1, 34010);
+            // writing another note moves the selection to its marking
+            QApplication::sendEvent(nv, &leave);          // the pen hovered over the first marking
+            nv->testPointer(0, on, -1, 35000);
+            nv->testPointer(2, on, -1, 35010);
+            NoteCard *n1 = np->card(id), *n2 = np->card(id2);
+            CHECK(n1 && n2 && n2->isLit() && !n1->isLit());
+            if (n1 && n2) {
+                QPointF in(n1->width() / 2.0, 6);
+                QMouseEvent click(QEvent::MouseButtonPress, in, n1->mapToGlobal(in), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(n1, &click);
+                wait(50);
+                CHECK(n1->isEditing() && !n2->isLit());
+                QApplication::sendEvent(n1->findChild<QPlainTextEdit *>(), &esc);
+                wait(100);
+                CHECK(n1->isLit() && !n1->isEditing() && !n2->isLit());
+            }
         }
         nt->window()->grab().save(out + "/9c_notes.png");
         PdfView::setNoteAfterMarking(true);

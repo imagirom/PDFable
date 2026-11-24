@@ -45,10 +45,12 @@ freehand pen ink.*
 - **Notes on markings** (like Zotero): select text, pick a colour in the small bar (or press Ctrl+H) and
   type; the note appears in the sidebar's "Notes" tab at the height of the marking, joined to it by a fine
   line. Click a note to edit it (Ctrl+Enter or a click elsewhere saves, Esc cancels); right-click to delete.
+  Click a marking to select it (Del removes it); double-click it, or tap it twice with the pen, to write
+  or edit its note.
   The lines are grey; a note shows the colour of its marking, on its line and around the marking, while
-  it is edited or the pointer is on it or on its marking, so notes at the same height can be told apart.
-  A long note scrolls inside its card.
-  Preferences decide whether the note editor opens right after marking or only when you click a marking.
+  it is edited, its marking is selected or the pointer is on either, so notes at the same height can be
+  told apart. A long note scrolls inside its card.
+  Preferences decide whether the note editor opens right after marking or only on a double-click.
   Notes are stored as standard PDF annotation comments, so other PDF readers show them too.
 - **PDF forms**: fillable fields are tinted blue. Click a text field and type on the page (Tab / Shift+Tab
   jump between fields, Enter or a click elsewhere confirms, Esc cancels); checkboxes and radio buttons toggle

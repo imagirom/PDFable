@@ -574,9 +574,9 @@ void MainWindow::showPreferences()
     connect(ui, &QComboBox::currentIndexChanged, this, [](int i) { MainWindow::setInterfaceMode(Theme::Mode(i)); });
     form->addRow(tr("Interface (Ctrl+Alt+D)"), ui);
     auto *noteMode = new QComboBox;
-    noteMode->addItems({tr("Right after marking (colour bar or Ctrl+H)"), tr("Only when I click the marking")});
+    noteMode->addItems({tr("Right after marking (colour bar or Ctrl+H)"), tr("Only when I double-click the marking")});
     noteMode->setCurrentIndex(PdfView::noteAfterMarking() ? 0 : 1);
-    noteMode->setToolTip(tr("Clicking a marking always opens its note."));
+    noteMode->setToolTip(tr("Double-clicking a marking always opens its note."));
     connect(noteMode, &QComboBox::currentIndexChanged, this, [](int i) {
         PdfView::setNoteAfterMarking(i == 0);
         QSettings().setValue("notes/afterMarking", i == 0);

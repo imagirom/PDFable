@@ -26,9 +26,11 @@ struct PenStyle {
 // Line from a marking to its note in the Notes sidebar (drawn from the marking to the left edge).
 struct NoteLink {
     int page = 0;
+    int id = 0;          // the marking's annotation
     QPointF anchor;      // page coordinates: bottom-left corner of the marking's first line
-    QColor color;
-    QVector<QPolygonF> outline;   // page coordinates: the marking's quads if its note is selected
+    QColor color;        // grey, or the marking's colour if lit
+    QVector<QPolygonF> quads;     // page coordinates
+    bool lit = false;    // its note is edited or under the pointer: the marking gets a boundary
 };
 
 struct ViewState {
@@ -120,6 +122,7 @@ signals:
     void historyChanged();
     void viewChanged();                          // scrolled, zoomed or re-laid out
     void noteRequested(int page, int annotId);   // open the note of a marking
+    void noteHovered(int annotId);               // pointer over a marking with a note (0 = left it)
 
 protected:
     void paintEvent(QPaintEvent *e) override;
@@ -209,6 +212,7 @@ private:
     QFrame *selBar_ = nullptr;
     QVector<NoteLink> noteLinks_;
     bool noteLinksVisible_ = false;
+    int hoverNote_ = 0;
     int pressMarkupPage_ = -1, pressMarkupId_ = 0;
     PenStyle pen_, hl_{QColor(255, 235, 60), 12.f};
     double zoom_ = 1.0;

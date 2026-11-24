@@ -499,6 +499,17 @@ int main(int argc, char **argv)
             std::printf("     card1 y=%d anchor y=%d, card2 y=%d\n", c1->y(), anchor1.y(), c2->y());
             CHECK(std::abs(c1->y() + 14 - anchor1.y()) < 4 && c2->y() > c1->y() + c1->height());
         }
+        // the pointer on a marking, or on a card, lights the note up
+        if (c1 && c2) {
+            CHECK(!c1->isLit() && !c2->isLit());
+            QPointF on = nv->pageToView(1, QPointF(150, 421));
+            QMouseEvent mv(QEvent::MouseMove, on, nv->viewport()->mapToGlobal(on), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(nv->viewport(), &mv);
+            CHECK(!c1->isLit() && c2->isLit());
+            QEvent leave(QEvent::Leave);
+            QApplication::sendEvent(nv, &leave);
+            CHECK(!c2->isLit());
+        }
         nt->window()->grab().save(out + "/9c_notes.png");
         PdfView::setNoteAfterMarking(true);
     }

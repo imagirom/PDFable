@@ -562,13 +562,13 @@ void PdfView::paintEvent(QPaintEvent *e)
         for (const NoteLink &l : std::as_const(noteLinks_)) {
             if (l.page < 0 || l.page >= pageRects_.size()) continue;
             QPointF a = pageToView(l.page, l.anchor);
-            if (l.outline.isEmpty() && (a.y() < ev.top() - 2 || a.y() > ev.bottom() + 2)) continue;
+            if (!l.lit && (a.y() < ev.top() - 2 || a.y() > ev.bottom() + 2)) continue;
             p.setPen(QPen(l.color, 1.2));
             p.drawLine(QPointF(0, a.y()), QPointF(a.x() - 1, a.y()));
-            if (!l.outline.isEmpty()) {      // boundary around the marking whose note is selected
+            if (l.lit) {
                 QPainterPath path;
                 path.setFillRule(Qt::WindingFill);
-                for (const QPolygonF &q : l.outline) path.addPolygon(q);
+                for (const QPolygonF &q : l.quads) path.addPolygon(q);
                 p.setBrush(Qt::NoBrush);
                 p.drawPath(QTransform::fromTranslate(pageViewRect(l.page).x(), pageViewRect(l.page).y()).scale(s, s).map(path.simplified()));
             }
@@ -792,6 +792,7 @@ void PdfView::leaveEvent(QEvent *e)
     previewTimer_.stop();
     hasHoverLink_ = false;      // an open preview stays while the pointer moves into it (pollPreview)
     if (preview_) preview_->hide();
+    if (hoverNote_) emit noteHovered(hoverNote_ = 0);
     QAbstractScrollArea::leaveEvent(e);
 }
 
@@ -1127,6 +1128,12 @@ void PdfView::hover(QPointF pos, bool pen)
         return;
     }
     int pg = pageAt(pos);
+    int note = 0;       // a marking under the pointer lights up its note in the Notes sidebar
+    if (pg >= 0 && noteLinksVisible_)
+        for (const NoteLink &nl : std::as_const(noteLinks_))
+            for (const QPolygonF &q : nl.quads)
+                if (nl.page == pg && q.containsPoint(toPage(pg, pos), Qt::OddEvenFill)) note = nl.id;
+    if (note != hoverNote_) emit noteHovered(hoverNote_ = note);
     Qt::CursorShape cur = pg >= 0 ? Qt::IBeamCursor : Qt::ArrowCursor;
     const LinkInfo *l = pg >= 0 ? linkAt(pg, toPage(pg, pos)) : nullptr;
     if (annPage_ >= 0) {

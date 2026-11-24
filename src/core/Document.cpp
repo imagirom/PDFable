@@ -904,16 +904,22 @@ QVector<MarkupNote> Document::markups(int withId)
                     m.anchor = m.kind == AnnotKind::Note ? QPointF(first.left(), first.center().y()) : first.bottomLeft();
                     if (m.kind == AnnotKind::Ink) {      // the box of a stroke can be far from the stroke itself
                         pdf_obj *list = pdf_dict_get(c, ref, PDF_NAME(InkList));
+                        pdf_obj *widths = pdf_dict_gets(c, ref, "PDFableWidths");
+                        qreal width = pdf_to_real(c, pdf_dict_getl(c, ref, PDF_NAME(BS), PDF_NAME(W), nullptr));
                         bool any = false;
                         for (int si = 0; si < pdf_array_len(c, list); ++si) {
                             pdf_obj *st = pdf_array_get(c, list, si);
+                            pdf_obj *sw = pdf_array_get(c, widths, si);
                             for (int k2 = 0; k2 + 1 < pdf_array_len(c, st); k2 += 2) {
                                 QPointF pt = qp_point(fz_transform_point(fz_make_point(pdf_array_get_real(c, st, k2), pdf_array_get_real(c, st, k2 + 1)), ctm));
                                 // leftmost; of several about equally far left (a vertical line) the lowest
-                                if (!any || pt.x() < m.anchor.x() - 1 || (pt.x() < m.anchor.x() + 1 && pt.y() > m.anchor.y())) m.anchor = pt;
+                                if (any && !(pt.x() < m.anchor.x() - 1 || (pt.x() < m.anchor.x() + 1 && pt.y() > m.anchor.y()))) continue;
+                                m.anchor = pt;
+                                if (pdf_array_len(c, sw) * 2 == pdf_array_len(c, st)) width = pdf_array_get_real(c, sw, k2 / 2);
                                 any = true;
                             }
                         }
+                        m.anchor.rx() -= width / 2 + 1.5;        // beside the stroke, not on it
                     }
                     out.push_back(m);
                 }
@@ -921,6 +927,31 @@ QVector<MarkupNote> Document::markups(int withId)
         });
     } catch (const PdfError &) {}
     return out;
+}
+
+qreal Document::clearOfText(int page, QPointF pt)
+{
+    std::lock_guard<std::recursive_mutex> lk(mu_);
+    qreal y = pt.y();
+    if (!doc_ || page < 0 || page >= sizes_.size()) return y;
+    try {
+        fzrun([&](fz_context *c) {
+            auto *st = static_cast<fz_stext_page *>(stext(c, page));
+            for (int pass = 0; pass < 3; ++pass) {      // the bottom of one line may lie inside the next
+                bool moved = false;
+                for (fz_stext_block *b = st->first_block; b; b = b->next) {
+                    if (b->type != FZ_STEXT_BLOCK_TEXT) continue;
+                    for (fz_stext_line *l = b->u.t.first_line; l; l = l->next)
+                        if (l->bbox.x0 < pt.x() && l->bbox.y0 < y && y < l->bbox.y1 - 0.5) {
+                            y = l->bbox.y1;
+                            moved = true;
+                        }
+                }
+                if (!moved) break;
+            }
+        });
+    } catch (const PdfError &) {}
+    return y;
 }
 
 QString Document::textInQuads(int page, const QVector<QPolygonF> &quads)

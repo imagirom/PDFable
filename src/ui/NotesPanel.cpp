@@ -259,6 +259,7 @@ QString NotesPanel::excerptFor(const MarkupNote &n)
 void NotesPanel::reload()
 {
     QVector<MarkupNote> all = doc_->markups(editingId_);
+    lineYs_.clear();        // the text of a page may have changed
     notes_.clear();
     QSet<int> keep;
     for (const MarkupNote &m : std::as_const(all)) {
@@ -339,6 +340,16 @@ QPointF NotesPanel::anchorOf(const MarkupNote &n) const
     return n.anchor;
 }
 
+// A text marking's line runs along the bottom of its text line. A stroke can sit anywhere: its
+// line is moved to the bottom of the text line it would otherwise strike through.
+qreal NotesPanel::lineYOf(const MarkupNote &n)
+{
+    if (n.kind != AnnotKind::Ink) return n.anchor.y();
+    auto it = lineYs_.find(n.id);
+    if (it == lineYs_.end() || it->first != n.anchor) it = lineYs_.insert(n.id, {n.anchor, doc_->clearOfText(n.page, n.anchor)});
+    return it->second;
+}
+
 void NotesPanel::relayout()
 {
     placed_.clear();
@@ -349,7 +360,7 @@ void NotesPanel::relayout()
     for (const MarkupNote &m : std::as_const(notes_)) {
         NoteCard *c = cards_.value(m.id);
         if (!c) continue;
-        QPointF a = view_->pageToView(m.page, anchorOf(m));
+        QPointF a = view_->pageToView(m.page, QPointF(anchorOf(m).x(), lineYOf(m)));
         qreal y = mapFromGlobal(vp->mapToGlobal(a.toPoint())).y();
         items.push_back({y, c});
     }
@@ -379,8 +390,8 @@ void NotesPanel::updateLinks()
     for (const MarkupNote &m : std::as_const(notes_)) {
         NoteCard *c = cards_.value(m.id);
         if (!c) continue;
-        if (c->isLit()) lit.push_back({m.page, m.id, m.kind, anchorOf(m), noteLineColor(m.color), m.quads, true});
-        else links.push_back({m.page, m.id, m.kind, anchorOf(m), kIdleLine, m.quads, false});
+        if (c->isLit()) lit.push_back({m.page, m.id, m.kind, anchorOf(m), lineYOf(m), noteLineColor(m.color), m.quads, true});
+        else links.push_back({m.page, m.id, m.kind, anchorOf(m), lineYOf(m), kIdleLine, m.quads, false});
     }
     view_->setNoteLinks(links + lit);
     view_->setNoteLinksVisible(active_ && isVisible());

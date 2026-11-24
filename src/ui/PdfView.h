@@ -29,6 +29,7 @@ struct NoteLink {
     int id = 0;          // the marking's annotation
     ink::AnnotKind kind = ink::AnnotKind::Highlight;
     QPointF anchor;      // page coordinates: where the line ends (MarkupNote::anchor)
+    qreal lineY = 0;     // page coordinates: the height the line runs at, clear of the text
     QColor color;        // grey, or the marking's colour if lit
     QVector<QPolygonF> quads;     // page coordinates
     bool lit = false;    // its note is edited, selected or under the pointer: the marking gets a boundary

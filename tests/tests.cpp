@@ -689,7 +689,9 @@ int main(int argc, char **argv)
         CHECK(noteOf(ink) == "Sign error here?" && np->noteCount() == before + 1);
         // the line from the note ends on the stroke, at its leftmost point, not at a corner of its box
         for (const MarkupNote &m : nd->markups())
-            if (m.id == ink) CHECK(QLineF(m.anchor, st.pts.first()).length() < 0.5);
+            if (m.id == ink) CHECK(QLineF(m.anchor, st.pts.first() - QPointF(k.width / 2 + 1.5, 0)).length() < 0.5);     // beside it
+        // and runs below the text line it would strike through; where there is no text, straight
+        CHECK(nd->clearOfText(1, st.pts.first()) > st.pts.first().y() + 1 && nd->clearOfText(1, QPointF(40, 330)) == 330);
         // the pointer lights the note where a click would select the stroke, not anywhere in its box
         if (NoteCard *sc = np->card(ink)) {
             QPointF away = nv->pageToView(1, QPointF(40, 330));

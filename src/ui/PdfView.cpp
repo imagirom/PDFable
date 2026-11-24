@@ -38,6 +38,29 @@ static bool hasHandles(AnnotKind k) { return k == AnnotKind::Ink || k == AnnotKi
 
 // The same hue, deep and saturated. Mid lightness shows on light and on dark paper alike;
 // darker() would turn yellow olive.
+// Rounds the corners of an outline made of straight edges.
+static QPainterPath roundedCorners(const QPainterPath &path, qreal r)
+{
+    QPainterPath out;
+    const QList<QPolygonF> shapes = path.simplified().toSubpathPolygons();
+    for (QPolygonF poly : shapes) {
+        if (poly.size() > 1 && poly.first() == poly.last()) poly.removeLast();
+        const int n = int(poly.size());
+        if (n < 3) continue;
+        for (int i = 0; i < n; ++i) {
+            const QLineF in(poly[i], poly[(i + n - 1) % n]), on(poly[i], poly[(i + 1) % n]);
+            if (in.length() < 1e-6 || on.length() < 1e-6) continue;
+            const qreal rr = qMin(r, qMin(in.length(), on.length()) / 2);
+            const QPointF a = in.pointAt(rr / in.length()), b = on.pointAt(rr / on.length());
+            if (out.elementCount() == 0 || out.currentPosition() == out.elementAt(0)) out.moveTo(a);
+            else out.lineTo(a);
+            out.quadTo(poly[i], b);
+        }
+        out.closeSubpath();
+    }
+    return out;
+}
+
 QColor noteLineColor(const QColor &c)
 {
     float h, s, l;
@@ -589,7 +612,8 @@ void PdfView::paintEvent(QPaintEvent *e)
             one.addRect(r);
             path = path.united(one);
         }
-        return QTransform::fromTranslate(pageViewRect(page).x(), pageViewRect(page).y()).scale(s, s).map(path);
+        path = QTransform::fromTranslate(pageViewRect(page).x(), pageViewRect(page).y()).scale(s, s).map(path);
+        return roundedCorners(path, rs.isEmpty() ? 0 : rs.first().height() * s * 0.3);     // like the ends of a highlight
     };
     // A highlight gets an outline. An underline or strike-out has lines of its own, which an outline
     // would turn into a stack of boxes: its text gets a light tint instead.
@@ -633,20 +657,24 @@ void PdfView::paintEvent(QPaintEvent *e)
         for (const NoteLink &l : std::as_const(noteLinks_)) {
             if (l.page < 0 || l.page >= pageRects_.size()) continue;
             QPointF a = pageToView(l.page, l.anchor);
-            if (!l.lit && (a.y() < ev.top() - 2 || a.y() > ev.bottom() + 2)) continue;
-            p.setPen(QPen(l.color, 1.2));
-            p.drawLine(QPointF(0, a.y()), QPointF(a.x() - 1, a.y()));
-            if (!l.lit) {       // the dot marks where the line ends; a lit marking shows that itself
-                p.setBrush(l.color);
-                p.setPen(Qt::NoPen);
-                p.drawEllipse(a, 2.5, 2.5);
-            } else if (isMarkup(l.kind))
+            const qreal y = pageToView(l.page, QPointF(0, l.lineY)).y();
+            if (!l.lit && (qMax(a.y(), y) < ev.top() - 2 || qMin(a.y(), y) > ev.bottom() + 2)) continue;
+            if (l.lit && isMarkup(l.kind))
                 lightMarkup(l.page, l.kind, l.quads, l.color);
-            else if (l.kind == AnnotKind::Note) {
+            else if (l.lit && l.kind == AnnotKind::Note) {
+                p.setPen(QPen(l.color, 1.2));
                 p.setBrush(Qt::NoBrush);
                 p.drawPath(ring(l.page, l.quads.value(0).boundingRect()));
-            } else if (!(annPage_ == l.page && ann_.id == l.id))      // a selected stroke shows its frame instead
+            } else if (l.lit && !(annPage_ == l.page && ann_.id == l.id))      // a selected stroke shows its frame instead
                 glow(l.page, l.id);
+            // the line: along the bottom of the text line it would strike through, then up or down to the anchor
+            p.setPen(QPen(l.color, 1.2));
+            const QPointF bend(a.x() - 1 - qMin(qAbs(a.y() - y), a.x()), y);
+            p.drawLine(QPointF(0, y), bend);
+            p.drawLine(bend, QPointF(a.x() - 1, a.y()));
+            p.setBrush(l.color);
+            p.setPen(Qt::NoPen);
+            p.drawEllipse(a, 2.5, 2.5);
         }
         p.restore();
     }

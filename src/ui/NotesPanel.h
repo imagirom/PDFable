@@ -64,6 +64,7 @@ private:
     void updateLinks();
     void updateLit();                    // after the hovered or the selected note changed
     QPointF anchorOf(const ink::MarkupNote &n) const;
+    qreal lineYOf(const ink::MarkupNote &n);
     QString excerptFor(const ink::MarkupNote &n);
 
     std::shared_ptr<ink::Document> doc_;
@@ -71,6 +72,7 @@ private:
     QVector<ink::MarkupNote> notes_;     // markings that have a note (plus the one being written)
     QHash<int, NoteCard *> cards_;
     QHash<int, QString> excerpts_;
+    QHash<int, QPair<QPointF, qreal>> lineYs_;   // per stroke: its anchor and the height its line runs at
     QVector<QPair<qreal, NoteCard *>> placed_;   // anchor y in panel coordinates, card
     int editingId_ = 0, hoveredId_ = 0, selectedId_ = 0;
     bool active_ = false;

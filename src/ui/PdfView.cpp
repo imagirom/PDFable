@@ -562,11 +562,17 @@ void PdfView::paintEvent(QPaintEvent *e)
         for (const NoteLink &l : std::as_const(noteLinks_)) {
             if (l.page < 0 || l.page >= pageRects_.size()) continue;
             QPointF a = pageToView(l.page, l.anchor);
-            if (a.y() < ev.top() - 2 || a.y() > ev.bottom() + 2) continue;
-            QColor c = l.color.darker(135);
-            p.setPen(QPen(c, 1.2));
+            if (l.outline.isEmpty() && (a.y() < ev.top() - 2 || a.y() > ev.bottom() + 2)) continue;
+            p.setPen(QPen(l.color, 1.2));
             p.drawLine(QPointF(0, a.y()), QPointF(a.x() - 1, a.y()));
-            p.setBrush(c);
+            if (!l.outline.isEmpty()) {      // boundary around the marking whose note is selected
+                QPainterPath path;
+                path.setFillRule(Qt::WindingFill);
+                for (const QPolygonF &q : l.outline) path.addPolygon(q);
+                p.setBrush(Qt::NoBrush);
+                p.drawPath(QTransform::fromTranslate(pageViewRect(l.page).x(), pageViewRect(l.page).y()).scale(s, s).map(path.simplified()));
+            }
+            p.setBrush(l.color);
             p.setPen(Qt::NoPen);
             p.drawEllipse(a, 2.5, 2.5);
         }

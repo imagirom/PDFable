@@ -28,6 +28,7 @@ struct NoteLink {
     int page = 0;
     QPointF anchor;      // page coordinates: bottom-left corner of the marking's first line
     QColor color;
+    QVector<QPolygonF> outline;   // page coordinates: the marking's quads if its note is selected
 };
 
 struct ViewState {

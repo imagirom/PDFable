@@ -454,6 +454,20 @@ int main(int argc, char **argv)
         QString stored;
         for (const MarkupNote &m : nd->markups()) if (m.id == id) stored = m.text;
         CHECK(stored.startsWith("Check this functional"));
+        // a card looks the same while it is edited; a long note scrolls instead of growing on
+        if (card && ed) {
+            int shown = card->height();
+            card->startEditing();
+            wait(50);
+            CHECK(card->isEditing() && card->height() == shown);
+            ed->setPlainText(QString("A long note that goes on. ").repeated(60));
+            wait(50);
+            CHECK(ed->verticalScrollBar()->maximum() > 0 && card->height() < 320);
+            QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+            QApplication::sendEvent(ed, &esc);
+            wait(100);
+            CHECK(!card->isEditing() && card->height() == shown && ed->verticalScrollBar()->maximum() == 0);
+        }
         // a second note further down, written by clicking an existing marking
         PdfView::setNoteAfterMarking(false);
         a = nv->pageToView(1, QPointF(75, 418)); b = nv->pageToView(1, QPointF(300, 424));

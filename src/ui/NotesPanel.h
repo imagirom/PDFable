@@ -19,8 +19,8 @@ public:
     void setNote(const ink::MarkupNote &n);
     const ink::MarkupNote &note() const { return note_; }
     void startEditing();
-    bool isEditing() const { return editor_ != nullptr; }
-    void fitWidth(int w);
+    bool isEditing() const { return editing_; }
+    void fitWidth(int w);                // also sets the height: grows with the note, a long one scrolls
 signals:
     void committed(int page, int id, const QString &text);
     void cancelled(int id);
@@ -32,10 +32,13 @@ protected:
     bool eventFilter(QObject *o, QEvent *e) override;
     void paintEvent(QPaintEvent *e) override;
 private:
+    void setEditing(bool on);
     void finish(bool keep);
     ink::MarkupNote note_;
-    QLabel *excerpt_, *text_;
-    QPlainTextEdit *editor_ = nullptr;
+    QLabel *excerpt_;
+    QPlainTextEdit *edit_;               // shows the note and edits it, so both look the same
+    bool editing_ = false;
+    int fitted_ = 0;                     // width the height was computed for (0 = compute again)
 };
 
 class NotesPanel : public QWidget {

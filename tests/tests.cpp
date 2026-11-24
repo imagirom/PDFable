@@ -687,6 +687,44 @@ int main(int argc, char **argv)
         }
         wait(300);
         CHECK(noteOf(ink) == "Sign error here?" && np->noteCount() == before + 1);
+        // the line from the note ends on the stroke, at its leftmost point, not at a corner of its box
+        for (const MarkupNote &m : nd->markups())
+            if (m.id == ink) CHECK(QLineF(m.anchor, st.pts.first()).length() < 0.5);
+        // the pointer lights the note where a click would select the stroke, not anywhere in its box
+        if (NoteCard *sc = np->card(ink)) {
+            QPointF away = nv->pageToView(1, QPointF(40, 330));
+            nv->testPointer(0, away, -1, 49000);              // writing the note had selected the stroke
+            nv->testPointer(2, away, -1, 49010);
+            auto moveTo = [&](QPointF pagePt) {
+                QPointF v = nv->pageToView(1, pagePt);
+                QMouseEvent mv(QEvent::MouseMove, v, nv->viewport()->mapToGlobal(v), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+                QApplication::sendEvent(nv->viewport(), &mv);
+            };
+            moveTo(QPointF(420, 475.5));                      // inside the box, off the line
+            CHECK(!sc->isLit());
+            moveTo(st.pts[8]);
+            CHECK(sc->isLit());
+            moveTo(QPointF(40, 330));
+            CHECK(!sc->isLit());
+        }
+        // a note does not change how a stroke is drawn (a highlighter stroke went opaque over the text)
+        {
+            InkData h;
+            InkStroke hs;
+            for (int j = 0; j <= 10; ++j) hs.pts.push_back(QPointF(100 + j * 12, 560));
+            hs.w.fill(9.f, hs.pts.size());
+            h.strokes.push_back(hs);
+            h.color = QColor(255, 235, 60);
+            h.width = 9;
+            h.highlighter = true;
+            int hid = nd->addInk(1, h);
+            const QRect clip(150, 1040, 500, 160);
+            QImage plain = nd->render(1, 2.0, clip);
+            nd->setAnnotContents(1, hid, "Marked with the highlighter.");
+            CHECK(!plain.isNull() && nd->render(1, 2.0, clip) == plain);
+            nd->removeAnnots(1, {hid});
+            wait(300);
+        }
         QRectF r0;
         for (const AnnotInfo &a : nd->annots(1)) if (a.id == ink) r0 = a.rect;
         nv->testPointer(0, on, -1, 50000);
@@ -696,7 +734,33 @@ int main(int argc, char **argv)
         QRectF r1;
         for (const AnnotInfo &a : nd->annots(1)) if (a.id == ink) r1 = a.rect;
         CHECK(r1.x() > r0.x() + 5 && noteOf(ink) == "Sign error here?" && np->card(ink));     // moved, note kept
+        if (NoteCard *sc = np->card(ink)) {                   // for the picture: the pointer on the stroke
+            QPointF v = nv->pageToView(1, r1.center() + QPointF(0, 0));
+            for (const InkAnnot &ia : nd->inkAnnots(1)) if (ia.id == ink) v = nv->pageToView(1, ia.data.strokes[0].pts[8]);
+            nv->testPointer(0, nv->pageToView(1, QPointF(40, 330)), -1, 51000);
+            nv->testPointer(2, nv->pageToView(1, QPointF(40, 330)), -1, 51010);
+            QMouseEvent mv(QEvent::MouseMove, v, nv->viewport()->mapToGlobal(v), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(nv->viewport(), &mv);
+            CHECK(sc->isLit());
+        }
+        wait(300);
         nt->window()->grab().save(out + "/9e_stroke_note.png");
+        {       // for the picture: a selected underline over several text lines
+            QPointF a = nv->pageToView(1, QPointF(200, 290)), b = nv->pageToView(1, QPointF(300, 356));
+            nv->testPointer(0, a, -1, 52000);
+            nv->testPointer(1, b, -1, 52010);
+            nv->testPointer(2, b, -1, 52020);
+            PdfView::setNoteAfterMarking(false);
+            int ul = nv->markupSelection(AnnotKind::Underline, QColor(220, 40, 40));
+            PdfView::setNoteAfterMarking(true);
+            QPointF c = nv->pageToView(1, QPointF(250, 322));
+            nv->testPointer(0, c, -1, 53000);
+            nv->testPointer(2, c, -1, 53010);
+            wait(300);
+            nt->window()->grab().save(out + "/9f_underline_selected.png");
+            nd->removeAnnots(1, {ul});
+            wait(200);
+        }
         nd->removeAnnots(1, {ink});                          // what the eraser does
         wait(300);
         CHECK(!np->card(ink) && np->noteCount() == before);

@@ -28,7 +28,7 @@ struct NoteLink {
     int page = 0;
     int id = 0;          // the marking's annotation
     ink::AnnotKind kind = ink::AnnotKind::Highlight;
-    QPointF anchor;      // page coordinates: bottom-left corner of the marking's first line
+    QPointF anchor;      // page coordinates: where the line ends (MarkupNote::anchor)
     QColor color;        // grey, or the marking's colour if lit
     QVector<QPolygonF> quads;     // page coordinates
     bool lit = false;    // its note is edited, selected or under the pointer: the marking gets a boundary
@@ -192,6 +192,7 @@ private:
     void paintLiveSegments(int from);
     void tryCommit(bool block);
     void eraseAt(int page, QPointF pt);
+    const QVector<ink::InkAnnot> &inksFor(int page);     // the strokes of a page, kept until the document changes
     void onHold();
     const QVector<ink::LinkInfo> &linksFor(int page);
     const ink::LinkInfo *linkAt(int page, QPointF pt);

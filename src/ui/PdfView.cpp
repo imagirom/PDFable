@@ -574,13 +574,55 @@ void PdfView::paintEvent(QPaintEvent *e)
         p.restore();
     }
 
-    auto boundary = [&](int page, const QVector<QPolygonF> &quads) {     // outline of a text marking, in view coordinates
+    // Outline of a text marking, in view coordinates: one shape around all its lines, not a box per line
+    auto boundary = [&](int page, const QVector<QPolygonF> &quads) {
+        QVector<QRectF> rs;
+        for (const QPolygonF &q : quads) rs.push_back(q.boundingRect());
+        std::sort(rs.begin(), rs.end(), [](const QRectF &a, const QRectF &b) { return a.top() < b.top(); });
         QPainterPath path;
-        path.setFillRule(Qt::WindingFill);
-        for (const QPolygonF &q : quads) path.addPolygon(q);
-        return QTransform::fromTranslate(pageViewRect(page).x(), pageViewRect(page).y()).scale(s, s).map(path.simplified());
+        for (int i = 0; i < rs.size(); ++i) {
+            QRectF r = rs[i];
+            // close the gap to the next text line, so that the boxes of the lines join
+            if (i + 1 < rs.size() && rs[i + 1].top() - r.bottom() < r.height() && rs[i + 1].left() < r.right() && rs[i + 1].right() > r.left())
+                r.setBottom(qMax(r.bottom(), rs[i + 1].top() + 0.1));
+            QPainterPath one;
+            one.addRect(r);
+            path = path.united(one);
+        }
+        return QTransform::fromTranslate(pageViewRect(page).x(), pageViewRect(page).y()).scale(s, s).map(path);
     };
-    auto ring = [&](int page, const QRectF &r) {      // around an icon or a stroke: a little outside it
+    // A highlight gets an outline. An underline or strike-out has lines of its own, which an outline
+    // would turn into a stack of boxes: its text gets a light tint instead.
+    auto lightMarkup = [&](int page, AnnotKind kind, const QVector<QPolygonF> &quads, QColor c) {
+        if (kind == AnnotKind::Highlight) {
+            p.setPen(QPen(c, 1.2));
+            p.setBrush(Qt::NoBrush);
+        } else {
+            c.setAlpha(45);
+            p.setPen(Qt::NoPen);
+            p.setBrush(c);
+        }
+        p.drawPath(boundary(page, quads));
+    };
+    // A stroke is lit by a glow along it; a box around it can be far from the stroke
+    auto glow = [&](int page, int id) {
+        for (const InkAnnot &ia : inksFor(page)) {
+            if (ia.id != id) continue;
+            QColor c = noteLineColor(ia.data.color);
+            c.setAlpha(110);
+            p.setBrush(Qt::NoBrush);
+            for (const InkStroke &st : ia.data.strokes) {
+                qreal w = ia.data.width;
+                for (float v : st.w) w = qMax(w, qreal(v));
+                p.setPen(QPen(c, w * s + 6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+                QPolygonF line;
+                for (const QPointF &pt : st.pts) line.push_back(pageToView(page, pt));
+                if (line.size() == 1) line.push_back(line.first());
+                p.drawPolyline(line);
+            }
+        }
+    };
+    auto ring = [&](int page, const QRectF &r) {      // around a sticky note's icon: a little outside it
         QPainterPath path;
         path.addRoundedRect(toView(page, r).adjusted(-3, -3, 3, 3), 4, 4);
         return path;
@@ -594,22 +636,30 @@ void PdfView::paintEvent(QPaintEvent *e)
             if (!l.lit && (a.y() < ev.top() - 2 || a.y() > ev.bottom() + 2)) continue;
             p.setPen(QPen(l.color, 1.2));
             p.drawLine(QPointF(0, a.y()), QPointF(a.x() - 1, a.y()));
-            if (l.lit && !(annPage_ == l.page && ann_.id == l.id && hasHandles(ann_.kind))) {     // a selected stroke has its frame already
+            if (!l.lit) {       // the dot marks where the line ends; a lit marking shows that itself
+                p.setBrush(l.color);
+                p.setPen(Qt::NoPen);
+                p.drawEllipse(a, 2.5, 2.5);
+            } else if (isMarkup(l.kind))
+                lightMarkup(l.page, l.kind, l.quads, l.color);
+            else if (l.kind == AnnotKind::Note) {
                 p.setBrush(Qt::NoBrush);
-                p.drawPath(isMarkup(l.kind) ? boundary(l.page, l.quads) : ring(l.page, l.quads.value(0).boundingRect()));
-            }
-            p.setBrush(l.color);
-            p.setPen(Qt::NoPen);
-            p.drawEllipse(a, 2.5, 2.5);
+                p.drawPath(ring(l.page, l.quads.value(0).boundingRect()));
+            } else if (!(annPage_ == l.page && ann_.id == l.id))      // a selected stroke shows its frame instead
+                glow(l.page, l.id);
         }
         p.restore();
     }
     if (annPage_ >= 0 && annPage_ < pageRects_.size() && (isMarkup(ann_.kind) || ann_.kind == AnnotKind::Note)) {
         // no handles to drag: a boundary in the colour of the marking, a ring around a sticky note
         p.setRenderHint(QPainter::Antialiasing);
-        p.setPen(QPen(noteLineColor(ann_.color), 1.2));
-        p.setBrush(Qt::NoBrush);
-        p.drawPath(isMarkup(ann_.kind) ? boundary(annPage_, ann_.quads) : ring(annPage_, drag_ == Drag::AnnotMove ? annDragRect_ : ann_.rect));
+        if (isMarkup(ann_.kind))
+            lightMarkup(annPage_, ann_.kind, ann_.quads, noteLineColor(ann_.color));
+        else {
+            p.setPen(QPen(noteLineColor(ann_.color), 1.2));
+            p.setBrush(Qt::NoBrush);
+            p.drawPath(ring(annPage_, drag_ == Drag::AnnotMove ? annDragRect_ : ann_.rect));
+        }
     } else if (annPage_ >= 0 && annPage_ < pageRects_.size()) {
         QRectF vr = toView(annPage_, (drag_ == Drag::AnnotMove || drag_ == Drag::AnnotResize) ? annDragRect_ : ann_.rect);
         p.setRenderHint(QPainter::Antialiasing, false);
@@ -1170,8 +1220,13 @@ void PdfView::hover(QPointF pos, bool pen)
     int note = 0;       // a marking under the pointer lights up its note in the Notes sidebar
     if (pg >= 0 && noteLinksVisible_)
         for (const NoteLink &nl : std::as_const(noteLinks_))
-            for (const QPolygonF &q : nl.quads)
-                if (nl.page == pg && q.containsPoint(toPage(pg, pos), Qt::OddEvenFill)) note = nl.id;
+            for (const QPolygonF &q : nl.quads) {
+                if (nl.page != pg || !q.containsPoint(toPage(pg, pos), Qt::OddEvenFill)) continue;
+                bool on = nl.kind != AnnotKind::Ink;     // a stroke: where a click would select it, not its whole box
+                for (const InkAnnot &ia : on ? QVector<InkAnnot>() : inksFor(pg))
+                    if (ia.id == nl.id) on = inkHit(ia.data, toPage(pg, pos), 5 / ppp());
+                if (on) note = nl.id;
+            }
     if (note != hoverNote_) emit noteHovered(hoverNote_ = note);
     Qt::CursorShape cur = pg >= 0 ? Qt::IBeamCursor : Qt::ArrowCursor;
     const LinkInfo *l = pg >= 0 ? linkAt(pg, toPage(pg, pos)) : nullptr;
@@ -1305,12 +1360,8 @@ void PdfView::onHold()
 
 void PdfView::eraseAt(int page, QPointF pt)
 {
-    if (erasePage_ != page || eraseGen_ != doc_->generation()) {
-        flushInk();
-        eraseCache_ = doc_->inkAnnots(page);
-        erasePage_ = page;
-        eraseGen_ = doc_->generation();
-    }
+    if (erasePage_ != page || eraseGen_ != doc_->generation()) flushInk();
+    inksFor(page);
     QVector<int> ids;
     qreal radius = 6 / ppp();
     for (const InkAnnot &a : std::as_const(eraseCache_))
@@ -1322,6 +1373,16 @@ void PdfView::eraseAt(int page, QPointF pt)
     for (int i = pending_.size() - 1; i >= 0; --i)
         if (pending_[i].page == page && inkHit(pending_[i].d, pt, radius)) pending_.removeAt(i);
     rebuildOverlay();
+}
+
+const QVector<InkAnnot> &PdfView::inksFor(int page)
+{
+    if (erasePage_ != page || eraseGen_ != doc_->generation()) {
+        eraseCache_ = doc_->inkAnnots(page);
+        erasePage_ = page;
+        eraseGen_ = doc_->generation();
+    }
+    return eraseCache_;
 }
 
 // ------------------------------------------------------------------ links

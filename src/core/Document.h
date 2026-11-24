@@ -79,6 +79,8 @@ struct MarkupNote {
     AnnotKind kind = AnnotKind::Highlight;
     QRectF rect;
     QVector<QPolygonF> quads;
+    QPointF anchor;      // where the line from its note ends: at the bottom left of the first marked text line,
+                         // at the left of a sticky note, at the leftmost point of a stroke
     QColor color;
     QString text;
     QString author;      // who wrote the note (PDF /T), empty if not recorded

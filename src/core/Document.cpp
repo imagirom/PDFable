@@ -840,6 +840,9 @@ void Document::setAnnotContents(int page, int id, const QString &text)
         // The author is the one who wrote the note first, a later edit only changes the date.
         if (!s_author.isEmpty() && !pdf_dict_get(c, pdf_annot_obj(c, a), PDF_NAME(T))) pdf_set_annot_author(c, a, s_author.toUtf8().constData());
         pdf_set_annot_modification_date(c, a, int64_t(std::time(nullptr)));
+        // MuPDF now wants to redraw the annotation its own way: a stroke would lose its variable
+        // width, and a highlighter stroke would cover the text instead of tinting it
+        if (pdf_annot_type(c, a) == PDF_ANNOT_INK) writeInk(c, doc_, pg, a, readInk(c, a));
     });
 }
 
@@ -897,6 +900,21 @@ QVector<MarkupNote> Document::markups(int withId)
                     // MuPDF draws the icon 16 pt wide at the top left of the rectangle, whatever its size
                     if (m.kind == AnnotKind::Note) m.rect.setSize(QSizeF(16, 16));
                     if (m.quads.isEmpty()) m.quads.push_back(QPolygonF(m.rect));
+                    const QRectF first = m.quads.first().boundingRect();
+                    m.anchor = m.kind == AnnotKind::Note ? QPointF(first.left(), first.center().y()) : first.bottomLeft();
+                    if (m.kind == AnnotKind::Ink) {      // the box of a stroke can be far from the stroke itself
+                        pdf_obj *list = pdf_dict_get(c, ref, PDF_NAME(InkList));
+                        bool any = false;
+                        for (int si = 0; si < pdf_array_len(c, list); ++si) {
+                            pdf_obj *st = pdf_array_get(c, list, si);
+                            for (int k2 = 0; k2 + 1 < pdf_array_len(c, st); k2 += 2) {
+                                QPointF pt = qp_point(fz_transform_point(fz_make_point(pdf_array_get_real(c, st, k2), pdf_array_get_real(c, st, k2 + 1)), ctm));
+                                // leftmost; of several about equally far left (a vertical line) the lowest
+                                if (!any || pt.x() < m.anchor.x() - 1 || (pt.x() < m.anchor.x() + 1 && pt.y() > m.anchor.y())) m.anchor = pt;
+                                any = true;
+                            }
+                        }
+                    }
                     out.push_back(m);
                 }
             }

@@ -54,7 +54,7 @@ colour.*
   Preferences decide whether the note editor opens right after marking or only on a double-click.
   Notes are stored as standard PDF annotation comments, so other PDF readers show them too.
   When there are notes above or below the part of the document in view, a hint at the top or bottom of
-  the sidebar says how many; a click on it goes to the nearest.
+  the sidebar says how many; a click on it goes to the nearest and selects it.
   A note records who wrote it and when, as other readers do, and its card shows both. The name is your
   account's full name unless you change or clear it in Preferences.
 - **Notes on pen strokes**: double-click a pen or highlighter stroke with the Select tool (or right-click

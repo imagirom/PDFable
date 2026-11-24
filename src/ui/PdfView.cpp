@@ -600,26 +600,32 @@ void PdfView::paintEvent(QPaintEvent *e)
     // Outline of a text marking, in view coordinates: one shape around all its lines, not a box per
     // line. A highlight gets the shape MuPDF draws it in, with its bulging ends.
     auto boundary = [&](int page, const QVector<QPolygonF> &quads, bool highlight) {
-        QVector<QRectF> rs;
-        for (const QPolygonF &q : quads) rs.push_back(q.boundingRect());
-        std::sort(rs.begin(), rs.end(), [](const QRectF &a, const QRectF &b) { return a.top() < b.top(); });
+        QVector<QPolygonF> qs = quads;      // each: upper left, upper right, lower right, lower left of a text line
+        std::sort(qs.begin(), qs.end(), [](const QPolygonF &a, const QPolygonF &b) { return a.boundingRect().top() < b.boundingRect().top(); });
         QPainterPath path;
-        for (int i = 0; i < rs.size(); ++i) {
-            const QRectF r = rs[i];
+        qreal lineHeight = 0;
+        for (int i = 0; i < qs.size(); ++i) {
+            const QPolygonF &q = qs[i];
+            if (q.size() < 4) continue;
+            // the text may run in any direction (the label of a plot's axis): along it and across it
+            const QLineF along(q[0], q[1]), across(q[3], q[0]);
+            if (along.length() < 1e-6 || across.length() < 1e-6) continue;
+            lineHeight = across.length();
             QPainterPath one;
             if (highlight) {
-                const qreal d = r.height() * 0.2357;     // MuPDF's control points for the ends: height * sqrt(2) / 6
-                one.moveTo(r.bottomLeft());
-                one.cubicTo(r.left() - d, r.bottom() - d, r.left() - d, r.top() + d, r.left(), r.top());
-                one.lineTo(r.topRight());
-                one.cubicTo(r.right() + d, r.top() + d, r.right() + d, r.bottom() - d, r.right(), r.bottom());
-                one.closeSubpath();
+                const qreal d = across.length() * 0.2357;       // MuPDF's control points for the ends: height * sqrt(2) / 6
+                const QPointF u = (q[1] - q[0]) / along.length() * d, v = (q[0] - q[3]) / across.length() * d;
+                one.moveTo(q[3]);
+                one.cubicTo(q[3] - u + v, q[0] - u - v, q[0]);
+                one.lineTo(q[1]);
+                one.cubicTo(q[1] + u - v, q[2] + u + v, q[2]);
             } else
-                one.addRect(r);
+                one.addPolygon(q);
+            one.closeSubpath();
             path = path.united(one);
-            if (i + 1 == rs.size()) break;
-            // fill the gap to the next text line where the two are above each other, so that they join
-            const QRectF n = rs[i + 1];
+            if (i + 1 == qs.size() || qAbs(along.dy()) > 0.01 * along.length() || along.dx() < 0) continue;
+            // level text: fill the gap to the next text line where the two are above each other, so that they join
+            const QRectF r = q.boundingRect(), n = qs[i + 1].boundingRect();
             const qreal left = qMax(r.left(), n.left()), right = qMin(r.right(), n.right());
             if (right > left && n.top() > r.bottom() - 0.1 && n.top() - r.bottom() < r.height()) {
                 QPainterPath gap;
@@ -628,7 +634,7 @@ void PdfView::paintEvent(QPaintEvent *e)
             }
         }
         path = QTransform::fromTranslate(pageViewRect(page).x(), pageViewRect(page).y()).scale(s, s).map(path);
-        return highlight || rs.isEmpty() ? path : roundedCorners(path, rs.first().height() * s * 0.2);
+        return highlight ? path : roundedCorners(path, lineHeight * s * 0.2);
     };
     // A highlight gets an outline. An underline or strike-out has lines of its own, which an outline
     // would turn into a stack of boxes: its text gets a light tint instead.

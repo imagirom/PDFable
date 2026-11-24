@@ -593,6 +593,7 @@ int main(int argc, char **argv)
             if (up) up->click();
             wait(200);
             CHECK(nv->currentPage() == 1 && np->card(id2) && np->card(id2)->isVisible() && hint("↑") && hint("↑")->text() == "↑ 1 note above");
+            CHECK(np->card(id2)->isLit() && !np->card(id)->isLit());       // the note it went to is the selected one
             nv->gotoPage(0, 0, false);
             wait(200);
             CHECK(hint("↓") && hint("↓")->text() == "↓ 2 notes below");

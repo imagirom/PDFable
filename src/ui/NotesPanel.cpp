@@ -245,8 +245,12 @@ NotesPanel::NotesPanel(std::shared_ptr<Document> doc, PdfView *view, QWidget *pa
                          "QToolButton:hover{border-color:palette(highlight);}");
         b->hide();
         connect(b, &QToolButton::clicked, this, [this, b] {
-            for (const MarkupNote &m : std::as_const(notes_))
-                if (m.id == (b == above_ ? aboveId_ : belowId_)) view_->gotoPage(m.page, qMax(0.0, lineYOf(m) - 60));
+            for (const MarkupNote &m : std::as_const(notes_)) {
+                if (m.id != (b == above_ ? aboveId_ : belowId_)) continue;
+                view_->gotoPage(m.page, qMax(0.0, lineYOf(m) - 60));
+                view_->selectAnnot(m.page, m.id);       // lit: which of the notes now in view it went to
+                break;
+            }
         });
     }
     connect(view_, &PdfView::noteHovered, this, [this](int id) { hoveredId_ = id; updateLit(); });
@@ -405,7 +409,8 @@ void NotesPanel::relayout()
     update();
 }
 
-// A hint at the top or bottom edge that there are notes further up or down; a click goes to the nearest.
+// A hint at the top or bottom edge that there are notes further up or down; a click goes to the
+// nearest and selects it.
 void NotesPanel::showHint(QToolButton *hint, bool up, int count, int id)
 {
     hint->setVisible(count > 0 && id != editingId_);

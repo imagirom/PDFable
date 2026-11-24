@@ -174,8 +174,8 @@ public:
     // Whole document, quick (no page loading). Of the pen strokes only those with a note, and withId.
     QVector<MarkupNote> markups(int withId = 0);
     QString textInQuads(int page, const QVector<QPolygonF> &quads);
-    // The height at which a line from the left page edge to a point runs clear of the text: the
-    // bottom of the text line it would strike through, or the point's own height.
+    // The height at which a line from the left to a point does not strike through the text there:
+    // the bottom of the text line the point is in or next to, or the point's own height.
     qreal clearOfText(int page, QPointF pt);
     QVector<FieldInfo> fields(int page);
     QVector<InkAnnot> inkAnnots(int page);

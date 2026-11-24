@@ -11,6 +11,7 @@
 class PdfView;
 class QLabel;
 class QPlainTextEdit;
+class QToolButton;
 
 class NoteCard : public QFrame {
     Q_OBJECT
@@ -65,6 +66,7 @@ private:
     void updateLit();                    // after the hovered or the selected note changed
     QPointF anchorOf(const ink::MarkupNote &n) const;
     qreal lineYOf(const ink::MarkupNote &n);
+    void showHint(QToolButton *hint, bool up, int count, int id);
     QString excerptFor(const ink::MarkupNote &n);
 
     std::shared_ptr<ink::Document> doc_;
@@ -75,5 +77,7 @@ private:
     QHash<int, QPair<QPointF, qreal>> lineYs_;   // per stroke: its anchor and the height its line runs at
     QVector<QPair<qreal, NoteCard *>> placed_;   // anchor y in panel coordinates, card
     int editingId_ = 0, hoveredId_ = 0, selectedId_ = 0;
+    QToolButton *above_, *below_;        // "3 notes above": notes outside the part of the document in view
+    int aboveId_ = 0, belowId_ = 0;      // the nearest of them, where a click on the hint goes
     bool active_ = false;
 };

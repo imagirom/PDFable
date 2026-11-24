@@ -597,23 +597,38 @@ void PdfView::paintEvent(QPaintEvent *e)
         p.restore();
     }
 
-    // Outline of a text marking, in view coordinates: one shape around all its lines, not a box per line
-    auto boundary = [&](int page, const QVector<QPolygonF> &quads) {
+    // Outline of a text marking, in view coordinates: one shape around all its lines, not a box per
+    // line. A highlight gets the shape MuPDF draws it in, with its bulging ends.
+    auto boundary = [&](int page, const QVector<QPolygonF> &quads, bool highlight) {
         QVector<QRectF> rs;
         for (const QPolygonF &q : quads) rs.push_back(q.boundingRect());
         std::sort(rs.begin(), rs.end(), [](const QRectF &a, const QRectF &b) { return a.top() < b.top(); });
         QPainterPath path;
         for (int i = 0; i < rs.size(); ++i) {
-            QRectF r = rs[i];
-            // close the gap to the next text line, so that the boxes of the lines join
-            if (i + 1 < rs.size() && rs[i + 1].top() - r.bottom() < r.height() && rs[i + 1].left() < r.right() && rs[i + 1].right() > r.left())
-                r.setBottom(qMax(r.bottom(), rs[i + 1].top() + 0.1));
+            const QRectF r = rs[i];
             QPainterPath one;
-            one.addRect(r);
+            if (highlight) {
+                const qreal d = r.height() * 0.2357;     // MuPDF's control points for the ends: height * sqrt(2) / 6
+                one.moveTo(r.bottomLeft());
+                one.cubicTo(r.left() - d, r.bottom() - d, r.left() - d, r.top() + d, r.left(), r.top());
+                one.lineTo(r.topRight());
+                one.cubicTo(r.right() + d, r.top() + d, r.right() + d, r.bottom() - d, r.right(), r.bottom());
+                one.closeSubpath();
+            } else
+                one.addRect(r);
             path = path.united(one);
+            if (i + 1 == rs.size()) break;
+            // fill the gap to the next text line where the two are above each other, so that they join
+            const QRectF n = rs[i + 1];
+            const qreal left = qMax(r.left(), n.left()), right = qMin(r.right(), n.right());
+            if (right > left && n.top() > r.bottom() - 0.1 && n.top() - r.bottom() < r.height()) {
+                QPainterPath gap;
+                gap.addRect(QRectF(left, r.bottom() - 0.1, right - left, n.top() - r.bottom() + 0.2));
+                path = path.united(gap);
+            }
         }
         path = QTransform::fromTranslate(pageViewRect(page).x(), pageViewRect(page).y()).scale(s, s).map(path);
-        return roundedCorners(path, rs.isEmpty() ? 0 : rs.first().height() * s * 0.3);     // like the ends of a highlight
+        return highlight || rs.isEmpty() ? path : roundedCorners(path, rs.first().height() * s * 0.2);
     };
     // A highlight gets an outline. An underline or strike-out has lines of its own, which an outline
     // would turn into a stack of boxes: its text gets a light tint instead.
@@ -626,23 +641,37 @@ void PdfView::paintEvent(QPaintEvent *e)
             p.setPen(Qt::NoPen);
             p.setBrush(c);
         }
-        p.drawPath(boundary(page, quads));
+        p.drawPath(boundary(page, quads, kind == AnnotKind::Highlight));
     };
-    // A stroke is lit by a glow along it; a box around it can be far from the stroke
+    // A stroke is lit by a glow along it; a box around it can be far from the stroke. A highlighter
+    // stroke gets an outline instead: a glow would darken the whole translucent band.
     auto glow = [&](int page, int id) {
         for (const InkAnnot &ia : inksFor(page)) {
             if (ia.id != id) continue;
             QColor c = noteLineColor(ia.data.color);
-            c.setAlpha(110);
             p.setBrush(Qt::NoBrush);
             for (const InkStroke &st : ia.data.strokes) {
                 qreal w = ia.data.width;
                 for (float v : st.w) w = qMax(w, qreal(v));
-                p.setPen(QPen(c, w * s + 6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
                 QPolygonF line;
                 for (const QPointF &pt : st.pts) line.push_back(pageToView(page, pt));
-                if (line.size() == 1) line.push_back(line.first());
-                p.drawPolyline(line);
+                if (line.size() == 1) line.push_back(line.first() + QPointF(0.01, 0));
+                if (ia.data.highlighter) {
+                    QPainterPath track;
+                    track.addPolygon(line);
+                    QPainterPathStroker around;
+                    around.setWidth(w * s + 2);
+                    around.setCapStyle(Qt::RoundCap);
+                    around.setJoinStyle(Qt::RoundJoin);
+                    QPainterPath outline = around.createStroke(track);
+                    outline.setFillRule(Qt::WindingFill);
+                    p.setPen(QPen(c, 1.2));
+                    p.drawPath(outline.simplified());
+                } else {
+                    c.setAlpha(110);
+                    p.setPen(QPen(c, w * s + 6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+                    p.drawPolyline(line);
+                }
             }
         }
     };

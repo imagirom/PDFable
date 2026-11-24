@@ -937,18 +937,19 @@ qreal Document::clearOfText(int page, QPointF pt)
     try {
         fzrun([&](fz_context *c) {
             auto *st = static_cast<fz_stext_page *>(stext(c, page));
-            for (int pass = 0; pass < 3; ++pass) {      // the bottom of one line may lie inside the next
-                bool moved = false;
-                for (fz_stext_block *b = st->first_block; b; b = b->next) {
-                    if (b->type != FZ_STEXT_BLOCK_TEXT) continue;
-                    for (fz_stext_line *l = b->u.t.first_line; l; l = l->next)
-                        if (l->bbox.x0 < pt.x() && l->bbox.y0 < y && y < l->bbox.y1 - 0.5) {
-                            y = l->bbox.y1;
-                            moved = true;
-                        }
+            // Only the text line the point is in or next to. On a page with two columns a line to
+            // the second column may still cross text of the first, as the lines of text markings do.
+            const fz_stext_line *best = nullptr;
+            qreal bestGap = 0;
+            for (fz_stext_block *b = st->first_block; b; b = b->next) {
+                if (b->type != FZ_STEXT_BLOCK_TEXT) continue;
+                for (fz_stext_line *l = b->u.t.first_line; l; l = l->next) {
+                    if (!(l->bbox.x0 < pt.x() && l->bbox.y0 < y && y < l->bbox.y1 - 0.5)) continue;
+                    const qreal gap = qMax(0.0, pt.x() - l->bbox.x1);
+                    if (!best || gap < bestGap) { best = l; bestGap = gap; }
                 }
-                if (!moved) break;
             }
+            if (best) y = best->bbox.y1;
         });
     } catch (const PdfError &) {}
     return y;

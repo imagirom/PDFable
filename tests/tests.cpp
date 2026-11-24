@@ -578,6 +578,28 @@ int main(int argc, char **argv)
             }
         }
         nt->window()->grab().save(out + "/9c_notes.png");
+        // notes outside the part of the document in view: a hint says how many, a click goes to the nearest
+        {
+            auto hint = [&](const QString &arrow) -> QToolButton * {
+                for (QToolButton *b : np->findChildren<QToolButton *>())
+                    if (b->isVisible() && b->text().startsWith(arrow)) return b;
+                return nullptr;
+            };
+            CHECK(!hint("↑") && !hint("↓"));
+            nv->gotoPage(4, 0, false);
+            wait(200);
+            QToolButton *up = hint("↑");
+            CHECK(up && up->text() == "↑ 2 notes above" && !hint("↓"));
+            if (up) up->click();
+            wait(200);
+            CHECK(nv->currentPage() == 1 && np->card(id2) && np->card(id2)->isVisible() && hint("↑") && hint("↑")->text() == "↑ 1 note above");
+            nv->gotoPage(0, 0, false);
+            wait(200);
+            CHECK(hint("↓") && hint("↓")->text() == "↓ 2 notes below");
+            nt->window()->grab().save(out + "/9h_hint.png");
+            nv->gotoPage(1, 100, false);
+            wait(200);
+        }
         PdfView::setNoteAfterMarking(true);
     }
 
@@ -724,6 +746,12 @@ int main(int argc, char **argv)
             QImage plain = nd->render(1, 2.0, clip);
             nd->setAnnotContents(1, hid, "Marked with the highlighter.");
             CHECK(!plain.isNull() && nd->render(1, 2.0, clip) == plain);
+            wait(300);
+            QPointF v = nv->pageToView(1, hs.pts[5]);         // for the picture: the pointer on it, its outline shown
+            QMouseEvent mv(QEvent::MouseMove, v, nv->viewport()->mapToGlobal(v), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(nv->viewport(), &mv);
+            CHECK(np->card(hid) && np->card(hid)->isLit());
+            nt->window()->grab().save(out + "/9g_highlighter_lit.png");
             nd->removeAnnots(1, {hid});
             wait(300);
         }

@@ -2,11 +2,12 @@
 
 A PDF reader and annotator for Windows pen devices, written in C++17 with Qt 6 Widgets and MuPDF.
 
-![PDFable with three highlighted passages, their notes in the Notes sidebar connected by fine lines, and a
-red pen loop drawn around an equation](docs/screenshot.png)
+![PDFable with three highlighted passages and a sticky note, their notes in the Notes sidebar connected by
+fine lines, and a red pen loop drawn around an equation](docs/screenshot.png)
 
-*Highlights in several colours, each with a note in the Notes sidebar at the height of its marking, and
-freehand pen ink.*
+*Highlights in several colours and a sticky note, each with its note in the Notes sidebar at the height of
+its marking, and freehand pen ink. The pointer is on the first highlight, so its note and line show its
+colour.*
 
 ![The same document with the Pages sidebar showing page previews that include the markings](docs/screenshot-pages.png)
 
@@ -52,6 +53,8 @@ freehand pen ink.*
   told apart. A long note scrolls inside its card.
   Preferences decide whether the note editor opens right after marking or only on a double-click.
   Notes are stored as standard PDF annotation comments, so other PDF readers show them too.
+  When there are notes above or below the part of the document in view, a hint at the top or bottom of
+  the sidebar says how many; a click on it goes to the nearest.
   A note records who wrote it and when, as other readers do, and its card shows both. The name is your
   account's full name unless you change or clear it in Preferences.
 - **Notes on pen strokes**: double-click a pen or highlighter stroke with the Select tool (or right-click

@@ -9,6 +9,7 @@
 #include <QPlainTextEdit>
 #include <QScrollBar>
 #include <QTextLayout>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
@@ -237,6 +238,17 @@ NotesPanel::NotesPanel(std::shared_ptr<Document> doc, PdfView *view, QWidget *pa
     setBackgroundRole(QPalette::Window);
     setMinimumWidth(170);
     connect(view_, &PdfView::viewChanged, this, &NotesPanel::relayout);
+    for (QToolButton **hint : {&above_, &below_}) {
+        auto *b = *hint = new QToolButton(this);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setStyleSheet("QToolButton{background:palette(base);border:1px solid palette(mid);border-radius:9px;padding:2px 10px;}"
+                         "QToolButton:hover{border-color:palette(highlight);}");
+        b->hide();
+        connect(b, &QToolButton::clicked, this, [this, b] {
+            for (const MarkupNote &m : std::as_const(notes_))
+                if (m.id == (b == above_ ? aboveId_ : belowId_)) view_->gotoPage(m.page, qMax(0.0, lineYOf(m) - 60));
+        });
+    }
     connect(view_, &PdfView::noteHovered, this, [this](int id) { hoveredId_ = id; updateLit(); });
     connect(view_, &PdfView::noteSelected, this, [this](int id) { selectedId_ = id; updateLit(); });
 }
@@ -357,12 +369,21 @@ void NotesPanel::relayout()
     QWidget *vp = view_->viewport();
     struct Item { qreal y; NoteCard *c; };
     QVector<Item> items;
+    int nAbove = 0, nBelow = 0;
+    qreal yAbove = -1e9, yBelow = 1e9;
     for (const MarkupNote &m : std::as_const(notes_)) {
         NoteCard *c = cards_.value(m.id);
         if (!c) continue;
         QPointF a = view_->pageToView(m.page, QPointF(anchorOf(m).x(), lineYOf(m)));
         qreal y = mapFromGlobal(vp->mapToGlobal(a.toPoint())).y();
         items.push_back({y, c});
+        if (y < 0) {
+            ++nAbove;
+            if (y > yAbove) { yAbove = y; aboveId_ = m.id; }
+        } else if (y > height()) {
+            ++nBelow;
+            if (y < yBelow) { yBelow = y; belowId_ = m.id; }
+        }
     }
     std::sort(items.begin(), items.end(), [](const Item &a, const Item &b) { return a.y < b.y; });
     qreal bottom = -1e9;
@@ -378,8 +399,22 @@ void NotesPanel::relayout()
         } else
             it.c->hide();
     }
+    showHint(above_, true, nAbove, aboveId_);
+    showHint(below_, false, nBelow, belowId_);
     updateLinks();
     update();
+}
+
+// A hint at the top or bottom edge that there are notes further up or down; a click goes to the nearest.
+void NotesPanel::showHint(QToolButton *hint, bool up, int count, int id)
+{
+    hint->setVisible(count > 0 && id != editingId_);
+    if (hint->isHidden()) return;
+    hint->setText(up ? (count == 1 ? tr("↑ 1 note above") : tr("↑ %1 notes above").arg(count))
+                     : (count == 1 ? tr("↓ 1 note below") : tr("↓ %1 notes below").arg(count)));
+    hint->adjustSize();
+    hint->move((width() - hint->width()) / 2, up ? 6 : height() - hint->height() - 6);
+    hint->raise();
 }
 
 void NotesPanel::updateLinks()

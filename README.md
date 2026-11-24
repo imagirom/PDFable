@@ -52,6 +52,8 @@ freehand pen ink.*
   told apart. A long note scrolls inside its card.
   Preferences decide whether the note editor opens right after marking or only on a double-click.
   Notes are stored as standard PDF annotation comments, so other PDF readers show them too.
+  A note records who wrote it and when, as other readers do, and its card shows both. The name is your
+  account's full name unless you change or clear it in Preferences.
 - **Notes on pen strokes**: double-click a pen or highlighter stroke with the Select tool (or right-click
   it, "Add note") to give it a note in the Notes sidebar. The note belongs to that one stroke: it moves
   with it and is removed with it, also by the eraser. Stored as the comment of the ink annotation.

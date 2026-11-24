@@ -81,6 +81,8 @@ struct MarkupNote {
     QVector<QPolygonF> quads;
     QColor color;
     QString text;
+    QString author;      // who wrote the note (PDF /T), empty if not recorded
+    QDateTime modified;  // when it was last changed (PDF /M), invalid if not recorded
 };
 
 // Interactive form field (AcroForm widget).
@@ -184,7 +186,11 @@ public:
     void setAnnotRect(int page, int id, const QRectF &r);
     void scaleFreeText(int page, int id, const QRectF &r, float fontSize);   // keeps font and colour
     void removeAnnots(int page, const QVector<int> &ids);
-    void setAnnotContents(int page, int id, const QString &text);
+    void setAnnotContents(int page, int id, const QString &text);    // the note; records the author and the time
+    // The name recorded as the author of the notes written from now on (empty: none).
+    static void setAuthor(const QString &name);
+    static QString author();
+    static QString defaultAuthor();      // the account's full name, else its login name
 
     // Form filling
     void setFieldText(int page, int id, const QString &text);

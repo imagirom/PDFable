@@ -41,7 +41,7 @@ private:
     void setEditing(bool on);
     void finish(bool keep);
     ink::MarkupNote note_;
-    QLabel *excerpt_;
+    QLabel *excerpt_, *meta_;            // quoted text of the marking; author and date of the note
     QPlainTextEdit *edit_;               // shows the note and edits it, so both look the same
     bool editing_ = false, lit_ = false;
     int fitted_ = 0;                     // width the height was computed for (0 = compute again)

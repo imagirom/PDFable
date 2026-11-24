@@ -1,4 +1,9 @@
 #include "Document.h"
+#include <ctime>
+#ifdef Q_OS_UNIX
+#include <pwd.h>
+#include <unistd.h>
+#endif
 #ifdef PDFABLE_SIGNING
 #include "Signer.h"
 #endif
@@ -810,9 +815,32 @@ void Document::scaleFreeText(int page, int id, const QRectF &r, float fontSize)
     });
 }
 
+static QString s_author;
+void Document::setAuthor(const QString &name) { s_author = name.trimmed(); }
+QString Document::author() { return s_author; }
+
+QString Document::defaultAuthor()
+{
+#ifdef Q_OS_UNIX
+    if (const passwd *pw = getpwuid(getuid())) {     // the "real name" given when the account was created
+        QString full = QString::fromLocal8Bit(pw->pw_gecos).section(',', 0, 0).trimmed();
+        if (!full.isEmpty()) return full;
+    }
+#endif
+    return qEnvironmentVariable("USERNAME", qEnvironmentVariable("USER"));
+}
+
 void Document::setAnnotContents(int page, int id, const QString &text)
 {
-    pageOp(page, "Note", [&](fz_context *c, pdf_page *pg) { pdf_set_annot_contents(c, findAnnot(c, pg, id), text.toUtf8().constData()); });
+    pageOp(page, "Note", [&](fz_context *c, pdf_page *pg) {
+        pdf_annot *a = findAnnot(c, pg, id);
+        pdf_set_annot_contents(c, a, text.toUtf8().constData());
+        if (text.isEmpty()) return;
+        // who and when, as other readers record and show it; MuPDF writes neither by itself.
+        // The author is the one who wrote the note first, a later edit only changes the date.
+        if (!s_author.isEmpty() && !pdf_dict_get(c, pdf_annot_obj(c, a), PDF_NAME(T))) pdf_set_annot_author(c, a, s_author.toUtf8().constData());
+        pdf_set_annot_modification_date(c, a, int64_t(std::time(nullptr)));
+    });
 }
 
 // Reads the markings straight from the page dictionaries: much faster than loading every page,
@@ -850,6 +878,8 @@ QVector<MarkupNote> Document::markups(int withId)
                     if (m.kind == AnnotKind::Ink && m.id != withId && !pdf_dict_get(c, ref, PDF_NAME(Contents))) continue;
                     m.rect = qr(fz_transform_rect(pdf_to_rect(c, pdf_dict_get(c, ref, PDF_NAME(Rect))), ctm));
                     m.text = QString::fromUtf8(pdf_dict_get_text_string(c, ref, PDF_NAME(Contents)));
+                    m.author = QString::fromUtf8(pdf_dict_get_text_string(c, ref, PDF_NAME(T)));
+                    if (int64_t t = pdf_dict_get_date(c, ref, PDF_NAME(M)); t > 0) m.modified = QDateTime::fromSecsSinceEpoch(t);
                     pdf_obj *col = pdf_dict_get(c, ref, PDF_NAME(C));
                     int cn = pdf_array_len(c, col);
                     if (cn == 3) m.color = QColor::fromRgbF(pdf_array_get_real(c, col, 0), pdf_array_get_real(c, col, 1), pdf_array_get_real(c, col, 2));

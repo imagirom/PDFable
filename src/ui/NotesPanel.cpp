@@ -3,6 +3,7 @@
 
 #include <QContextMenuEvent>
 #include <QLabel>
+#include <QLocale>
 #include <QMenu>
 #include <QPainter>
 #include <QPlainTextEdit>
@@ -67,8 +68,14 @@ NoteCard::NoteCard(const MarkupNote &n, const QString &excerpt, QWidget *parent)
     edit_->setStyleSheet("QPlainTextEdit{background:transparent;border:none;padding:0;}");
     edit_->document()->setDocumentMargin(0);
     edit_->installEventFilter(this);
+    meta_ = new QLabel(this);
+    f.setItalic(false);
+    meta_->setFont(f);
+    meta_->setForegroundRole(QPalette::PlaceholderText);
+    meta_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);      // a long name is cut off, the card keeps its width
     lay->addWidget(excerpt_);
     lay->addWidget(edit_);
+    lay->addWidget(meta_);
     connect(edit_, &QPlainTextEdit::textChanged, this, [this] {
         if (!editing_) return;
         fitted_ = 0;
@@ -84,6 +91,16 @@ void NoteCard::setNote(const MarkupNote &n)
     note_ = n;
     if (!editing_ && edit_->toPlainText() != n.text) {      // reload() passes every note, changed or not
         edit_->setPlainText(n.text);
+        fitted_ = 0;
+    }
+    QStringList meta;
+    if (!n.author.isEmpty()) meta << n.author;
+    if (n.modified.isValid()) meta << QLocale().toString(n.modified.toLocalTime().date(), QLocale::ShortFormat);
+    const QString line = meta.join(QStringLiteral(" · "));
+    if (line != meta_->text() || meta_->isHidden() != line.isEmpty()) {
+        meta_->setText(line);
+        meta_->setToolTip(n.modified.isValid() ? QLocale().toString(n.modified.toLocalTime(), QLocale::LongFormat) : QString());
+        meta_->setVisible(!line.isEmpty());
         fitted_ = 0;
     }
     update();

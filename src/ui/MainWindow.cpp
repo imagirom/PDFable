@@ -22,6 +22,7 @@
 #include <QImageReader>
 #include <QInputDialog>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
@@ -584,6 +585,14 @@ void MainWindow::showPreferences()
         QSettings().setValue("notes/afterMarking", i == 0);
     });
     form->addRow(tr("Open the note editor"), noteMode);
+    auto *author = new QLineEdit(Document::author());
+    author->setPlaceholderText(tr("No name"));
+    author->setToolTip(tr("Stored in the PDF with every note you write, and shown on the note, as other PDF readers do."));
+    connect(author, &QLineEdit::textChanged, this, [](const QString &name) {
+        Document::setAuthor(name);
+        QSettings().setValue("notes/author", Document::author());
+    });
+    form->addRow(tr("Your name on notes"), author);
     auto *note = new QLabel(tr("Pen, mouse and finger: the pen and the mouse each keep their own tool. Tap a toolbar "
                                "button with the pen to set the pen's tool, click it with the mouse to set the mouse's "
                                "tool. A finger always pans and zooms."));

@@ -433,6 +433,7 @@ int main(int argc, char **argv)
         nv->gotoPage(1, 100, false);
         wait(200);
         PdfView::setNoteAfterMarking(true);
+        Document::setAuthor("Test Author");
         QPointF a = nv->pageToView(1, QPointF(75, 255)), b = nv->pageToView(1, QPointF(330, 262));
         nv->testPointer(0, a, -1, 30000);
         nv->testPointer(1, b, -1, 30010);
@@ -455,6 +456,20 @@ int main(int argc, char **argv)
         QString stored;
         for (const MarkupNote &m : nd->markups()) if (m.id == id) stored = m.text;
         CHECK(stored.startsWith("Check this functional"));
+        // the note records who wrote it and when, and its card shows both
+        auto noteMeta = [&](int which) {
+            for (const MarkupNote &m : nd->markups()) if (m.id == which) return m;
+            return MarkupNote();
+        };
+        CHECK(noteMeta(id).author == "Test Author" && std::llabs(noteMeta(id).modified.secsTo(QDateTime::currentDateTime())) < 120);
+        bool named = false;
+        for (QLabel *l : card->findChildren<QLabel *>()) named = named || (l->isVisible() && l->text().startsWith("Test Author · "));
+        CHECK(named);
+        Document::setAuthor("Someone Else");              // a later edit by somebody else keeps the author
+        nd->setAnnotContents(1, id, stored);
+        CHECK(noteMeta(id).author == "Test Author");
+        Document::setAuthor("Test Author");
+        wait(300);
         // a card looks the same while it is edited; a long note scrolls instead of growing on
         if (card && ed) {
             int shown = card->height();

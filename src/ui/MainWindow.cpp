@@ -311,6 +311,7 @@ void MainWindow::buildActions()
     tool(Tool::Highlighter, tr("High&lighter"), "M");
     tool(Tool::Eraser, tr("&Eraser"), "E");
     tool(Tool::Text, tr("&Text box"), "T");
+    tool(Tool::Note, tr("Sticky &note"), "N");
     toolActions_[int(Tool::Select)]->setChecked(true);
 
     QMenu *pages = menuBar()->addMenu(tr("&Pages"));
@@ -369,9 +370,10 @@ void MainWindow::buildActions()
     tb->addAction(backAct_);
     tb->addAction(fwdAct_);
     tb->addSeparator();
-    const char *toolIcons[6] = {"select", "hand", "pen", "marker", "eraser", "text"};
-    const QStringList toolTips{tr("Select text and objects"), tr("Pan"), tr("Pen"), tr("Highlighter"), tr("Eraser"), tr("Text box")};
-    for (int i = 0; i < 6; ++i) {
+    const char *toolIcons[7] = {"select", "hand", "pen", "marker", "eraser", "text", "note"};
+    const QStringList toolTips{tr("Select text and objects"), tr("Pan"), tr("Pen"), tr("Highlighter"), tr("Eraser"), tr("Text box"),
+                               tr("Sticky note: click on the page, write in the Notes sidebar")};
+    for (int i = 0; i < 7; ++i) {
         deco(toolActions_[i], toolIcons[i], toolTips[i]);
         tb->addAction(toolActions_[i]);
     }

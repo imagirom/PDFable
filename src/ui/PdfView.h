@@ -16,7 +16,7 @@ class QFrame;
 class QPlainTextEdit;
 class QTouchEvent;
 
-enum class Tool { Select, Hand, Pen, Highlighter, Eraser, Text };
+enum class Tool { Select, Hand, Pen, Highlighter, Eraser, Text, Note };
 
 struct PenStyle {
     QColor color = QColor(0x1a, 0x1a, 0x1a);
@@ -27,6 +27,7 @@ struct PenStyle {
 struct NoteLink {
     int page = 0;
     int id = 0;          // the marking's annotation
+    ink::AnnotKind kind = ink::AnnotKind::Highlight;
     QPointF anchor;      // page coordinates: bottom-left corner of the marking's first line
     QColor color;        // grey, or the marking's colour if lit
     QVector<QPolygonF> quads;     // page coordinates
@@ -199,6 +200,8 @@ private:
     bool annotAt(int page, QPointF pt, ink::AnnotInfo *out);
     int markupAt(int page, QPointF pt);          // text marking under a point (0 = none)
     void clickMarkup(int page, int id, const Ptr &e);
+    bool secondTap(int id, const Ptr &e);
+    void addNote(int page, QPointF pt);
     void selectAnnot(int page, const ink::AnnotInfo &a);
     void clearAnnotSelection();
     void applyAnnotDrag(bool resized);
@@ -220,8 +223,8 @@ private:
     bool noteLinksVisible_ = false;
     int hoverNote_ = 0;
     int pressMarkupPage_ = -1, pressMarkupId_ = 0;
-    int tapMarkupId_ = 0;        // pen: the marking tapped last, to recognise a second tap
-    qint64 tapMarkupT_ = 0;
+    int tapId_ = 0;              // pen: the annotation tapped last, to recognise a second tap
+    qint64 tapT_ = 0;
     PenStyle pen_, hl_{QColor(255, 235, 60), 12.f};
     double zoom_ = 1.0;
     QVector<QRectF> pageRects_;

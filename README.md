@@ -52,6 +52,11 @@ freehand pen ink.*
   told apart. A long note scrolls inside its card.
   Preferences decide whether the note editor opens right after marking or only on a double-click.
   Notes are stored as standard PDF annotation comments, so other PDF readers show them too.
+- **Sticky notes**: pick the Note tool (N) and click anywhere on the page, or right-click and choose "Add
+  note here": an icon marks the spot and its note is written in the Notes sidebar, like the note of a
+  marking. Click the icon to select it, drag it to move it, double-click it to edit the note; Del removes
+  it. A sticky note left without text disappears again. Stored as standard PDF text annotations, so other
+  PDF readers show them, and theirs appear in the sidebar.
 - **PDF forms**: fillable fields are tinted blue. Click a text field and type on the page (Tab / Shift+Tab
   jump between fields, Enter or a click elsewhere confirms, Esc cancels); checkboxes and radio buttons toggle
   on click; dropdowns and list boxes open a menu. Works with the Select and Hand tools.
@@ -173,7 +178,7 @@ resets the undo history.
 
 ## Shortcuts
 
-V select, H hand, P pen, M highlighter, E eraser, T text box, Ctrl+F find, Ctrl+H highlight selection,
+V select, H hand, P pen, M highlighter, E eraser, T text box, N sticky note, Ctrl+F find, Ctrl+H highlight selection,
 Ctrl+Shift+H handwritten signature, F4 sidebar, Ctrl+1/2/0 fit page / fit width / 100 %, Alt+Left/Right history.
 
 ## Licence

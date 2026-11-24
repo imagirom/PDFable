@@ -233,6 +233,7 @@ int NotesPanel::noteCount() const
 
 QString NotesPanel::excerptFor(const MarkupNote &n)
 {
+    if (n.kind == AnnotKind::Note) return QString();     // a sticky note marks no text
     auto it = excerpts_.find(n.id);
     if (it == excerpts_.end()) it = excerpts_.insert(n.id, doc_->textInQuads(n.page, n.quads));
     return it.value();
@@ -262,14 +263,24 @@ void NotesPanel::reload()
             c->setLit(m.id == hoveredId_ || m.id == selectedId_);
             connect(c, &NoteCard::committed, this, [this](int page, int id, const QString &text) {
                 if (editingId_ == id) editingId_ = 0;
+                NoteCard *c = cards_.value(id);
                 try {
                     view_->flushInk();
-                    doc_->setAnnotContents(page, id, text);
+                    // a sticky note is nothing without its text
+                    if (text.isEmpty() && c && c->note().kind == AnnotKind::Note) doc_->removeAnnots(page, {id});
+                    else doc_->setAnnotContents(page, id, text);
                 } catch (const PdfError &) {}
                 reload();
             });
             connect(c, &NoteCard::cancelled, this, [this](int id) {
                 if (editingId_ == id) editingId_ = 0;
+                NoteCard *c = cards_.value(id);
+                if (c && c->note().kind == AnnotKind::Note && c->note().text.isEmpty()) {     // placed, then not written
+                    try {
+                        view_->flushInk();
+                        doc_->removeAnnots(c->note().page, {id});
+                    } catch (const PdfError &) {}
+                }
                 QTimer::singleShot(0, this, &NotesPanel::reload);
             });
             connect(c, &NoteCard::deleteMarking, this, [this](int page, int id) {
@@ -353,8 +364,8 @@ void NotesPanel::updateLinks()
     for (const MarkupNote &m : std::as_const(notes_)) {
         NoteCard *c = cards_.value(m.id);
         if (!c) continue;
-        if (c->isLit()) lit.push_back({m.page, m.id, anchorOf(m), noteLineColor(m.color), m.quads, true});
-        else links.push_back({m.page, m.id, anchorOf(m), kIdleLine, m.quads, false});
+        if (c->isLit()) lit.push_back({m.page, m.id, m.kind, anchorOf(m), noteLineColor(m.color), m.quads, true});
+        else links.push_back({m.page, m.id, m.kind, anchorOf(m), kIdleLine, m.quads, false});
     }
     view_->setNoteLinks(links + lit);
     view_->setNoteLinksVisible(active_ && isVisible());

@@ -566,6 +566,76 @@ int main(int argc, char **argv)
         PdfView::setNoteAfterMarking(true);
     }
 
+    // sticky notes: the tool puts an icon on the page and opens its note in the Notes sidebar
+    {
+        DocumentTab *nt = w->currentTab();
+        PdfView *nv = nt->view();
+        Document *nd = nt->doc();
+        NotesPanel *np = nt->notesPanel();
+        const int before = np->noteCount();
+        auto stickies = [&] {
+            QVector<AnnotInfo> v;
+            for (const AnnotInfo &a : nd->annots(1)) if (a.kind == AnnotKind::Note) v.push_back(a);
+            return v;
+        };
+        auto key = [&](QWidget *to, int k, Qt::KeyboardModifiers m = Qt::NoModifier) {
+            QKeyEvent e(QEvent::KeyPress, k, m);
+            QApplication::sendEvent(to, &e);
+        };
+        QPointF at = nv->pageToView(1, QPointF(420, 330));
+        w->setTool(Tool::Note);
+        nv->testPointer(0, at, -1, 40000);
+        nv->testPointer(2, at, -1, 40010);
+        wait(50);
+        CHECK(stickies().size() == 1 && nv->tool() == Tool::Select);
+        int sid = stickies().value(0).id;
+        CHECK(np->card(sid) && np->card(sid)->isEditing());
+        if (np->card(sid)) key(np->card(sid)->findChild<QPlainTextEdit *>(), Qt::Key_Escape);
+        wait(300);
+        CHECK(stickies().isEmpty() && !np->card(sid));     // placed but not written: gone again
+        w->setTool(Tool::Note);
+        nv->testPointer(0, at, -1, 41000);
+        nv->testPointer(2, at, -1, 41010);
+        wait(50);
+        sid = stickies().value(0).id;
+        if (NoteCard *sc = np->card(sid)) {
+            auto *ed = sc->findChild<QPlainTextEdit *>();
+            ed->setPlainText("Ask about the boundary term.");
+            key(ed, Qt::Key_Return, Qt::ControlModifier);
+        }
+        wait(300);
+        CHECK(stickies().size() == 1 && stickies().value(0).text == "Ask about the boundary term." && np->noteCount() == before + 1);
+        // a click selects it, a drag moves it, a double-click opens its note
+        NoteCard *sc = np->card(sid);
+        QRectF r0 = stickies().value(0).rect;
+        for (const MarkupNote &m : nd->markups())            // the sidebar's rectangle is where the icon is drawn
+            if (m.id == sid) CHECK(QLineF(m.rect.topLeft(), r0.topLeft()).length() < 0.6 && std::fabs(m.rect.width() - r0.width()) < 0.6);
+        nv->testPointer(0, at, -1, 42000);
+        nv->testPointer(2, at, -1, 42010);
+        CHECK(sc && sc->isLit() && !sc->isEditing());
+        QPointF to = at + QPointF(60, 40);
+        nv->testPointer(0, at, -1, 43000);
+        nv->testPointer(1, to, -1, 43010);
+        nv->testPointer(2, to, -1, 43020);
+        wait(300);
+        QRectF r1 = stickies().value(0).rect;
+        qreal ppp = nv->zoom() * 96.0 / 72.0;
+        std::printf("     sticky note moved by %.1f, %.1f pt\n", r1.x() - r0.x(), r1.y() - r0.y());
+        CHECK(std::fabs(r1.x() - r0.x() - 60 / ppp) < 1 && std::fabs(r1.y() - r0.y() - 40 / ppp) < 1 && r1.size() == r0.size());
+        CHECK(stickies().value(0).id == sid && stickies().value(0).text.startsWith("Ask about"));
+        QMouseEvent dbl(QEvent::MouseButtonDblClick, to, nv->viewport()->mapToGlobal(to), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(nv->viewport(), &dbl);
+        wait(50);
+        sc = np->card(sid);
+        CHECK(sc && sc->isEditing());
+        if (sc) key(sc->findChild<QPlainTextEdit *>(), Qt::Key_Escape);
+        wait(300);
+        CHECK(stickies().size() == 1);                       // a written note survives Esc
+        sc = np->card(sid);
+        CHECK(sc && sc->isVisible() && sc->height() > 20);  // a card without a quoted excerpt
+        nt->window()->grab().save(out + "/9d_sticky.png");
+    }
+
     // fillable forms: type in place, Tab to the next field, checkbox, saved values
     {
         QFile::remove(out + "/form.pdf");

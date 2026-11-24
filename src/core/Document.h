@@ -59,19 +59,20 @@ struct InkData {
     void transform(const QTransform &t, qreal widthScale);
 };
 
-enum class AnnotKind { Ink, FreeText, Stamp, Highlight, Underline, StrikeOut, Other };
+enum class AnnotKind { Ink, FreeText, Stamp, Highlight, Underline, StrikeOut, Note, Other };
 
 struct AnnotInfo {
     int id = 0;
     AnnotKind kind = AnnotKind::Other;
     QRectF rect;
-    QString text;        // FreeText: its text; markups: the attached note
+    QString text;        // FreeText: its text; markups and sticky notes: the note
     float fontSize = 0;  // FreeText only
-    QColor color;        // FreeText: text colour; markups: highlight colour
+    QColor color;        // FreeText: text colour; markups: highlight colour; sticky notes: icon colour
     QVector<QPolygonF> quads;   // markups (highlight, underline, strike-out)
 };
 
-// A text marking (highlight, underline, strike-out) and the note attached to it.
+// A text marking (highlight, underline, strike-out) and the note attached to it, or a sticky
+// note (an icon anywhere on the page, standing for its note).
 struct MarkupNote {
     int page = 0;
     int id = 0;
@@ -175,6 +176,7 @@ public:
     int addInk(int page, const InkData &d);
     void setInk(int page, int id, const InkData &d);
     int addMarkup(int page, AnnotKind kind, const QVector<QPolygonF> &quads, const QColor &c);
+    int addNote(int page, QPointF at, const QColor &c);          // sticky note icon centred on a point
     int addFreeText(int page, const QRectF &r, const QString &text, float size, const QColor &c);
     void setFreeText(int page, int id, const QString &text, const QRectF &rect = QRectF());
     int addStamp(int page, const QRectF &r, const QImage &img);

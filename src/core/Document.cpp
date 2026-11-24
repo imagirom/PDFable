@@ -479,6 +479,7 @@ static AnnotKind kindOf(enum pdf_annot_type t)
     case PDF_ANNOT_HIGHLIGHT: return AnnotKind::Highlight;
     case PDF_ANNOT_UNDERLINE: return AnnotKind::Underline;
     case PDF_ANNOT_STRIKE_OUT: return AnnotKind::StrikeOut;
+    case PDF_ANNOT_TEXT: return AnnotKind::Note;
     default: return AnnotKind::Other;
     }
 }
@@ -625,13 +626,14 @@ QVector<AnnotInfo> Document::annots(int page)
                         float col[4] = {0, 0, 0, 0};
                         pdf_annot_default_appearance(c, a, &font, &ai.fontSize, &n, col);
                         ai.color = n == 3 ? QColor::fromRgbF(col[0], col[1], col[2]) : n == 1 ? QColor::fromRgbF(col[0], col[0], col[0]) : QColor(Qt::black);
-                    } else if (ai.kind == AnnotKind::Highlight || ai.kind == AnnotKind::Underline || ai.kind == AnnotKind::StrikeOut) {
+                    } else if (ai.kind == AnnotKind::Highlight || ai.kind == AnnotKind::Underline || ai.kind == AnnotKind::StrikeOut ||
+                               ai.kind == AnnotKind::Note) {
                         ai.text = QString::fromUtf8(pdf_annot_contents(c, a));
                         int n = 0;
                         float col[4] = {0, 0, 0, 0};
                         pdf_annot_color(c, a, &n, col);
                         ai.color = n == 3 ? QColor::fromRgbF(col[0], col[1], col[2]) : n == 1 ? QColor::fromRgbF(col[0], col[0], col[0]) : QColor(255, 235, 60);
-                        int nq = pdf_annot_quad_point_count(c, a);
+                        int nq = ai.kind == AnnotKind::Note ? 0 : pdf_annot_quad_point_count(c, a);    // MuPDF throws for a type without quads
                         for (int q = 0; q < nq; ++q) ai.quads.push_back(qquad(pdf_annot_quad_point(c, a, q)));
                     }
                     out.push_back(ai);
@@ -699,6 +701,25 @@ int Document::addMarkup(int page, AnnotKind kind, const QVector<QPolygonF> &quad
                 fq.ul = fp(q[0]); fq.ur = fp(q[1]); fq.lr = fp(q[2]); fq.ll = fp(q[3]);
                 pdf_add_annot_quad_point(c, a, fq);
             }
+            id = annotId(c, a);
+        }
+        fz_always(c) pdf_drop_annot(c, a);
+        fz_catch(c) fz_rethrow(c);
+    });
+    return id;
+}
+
+int Document::addNote(int page, QPointF at, const QColor &col)
+{
+    int id = 0;
+    pageOp(page, "Sticky note", [&](fz_context *c, pdf_page *pg) {
+        pdf_annot *a = pdf_create_annot(c, pg, PDF_ANNOT_TEXT);
+        fz_try(c)
+        {
+            float rgb[3] = {col.redF(), col.greenF(), col.blueF()};
+            pdf_set_annot_color(c, a, 3, rgb);
+            pdf_set_annot_icon_name(c, a, "Note");
+            pdf_set_annot_rect(c, a, fr(QRectF(at.x() - 8, at.y() - 8, 16, 16)));    // the size MuPDF draws the icon at
             id = annotId(c, a);
         }
         fz_always(c) pdf_drop_annot(c, a);
@@ -818,6 +839,7 @@ QVector<MarkupNote> Document::markups()
                     if (pdf_name_eq(c, st, PDF_NAME(Highlight))) m.kind = AnnotKind::Highlight;
                     else if (pdf_name_eq(c, st, PDF_NAME(Underline))) m.kind = AnnotKind::Underline;
                     else if (pdf_name_eq(c, st, PDF_NAME(StrikeOut))) m.kind = AnnotKind::StrikeOut;
+                    else if (pdf_name_eq(c, st, PDF_NAME(Text)) && !pdf_dict_get(c, ref, PDF_NAME(IRT))) m.kind = AnnotKind::Note;   // not replies
                     else continue;
                     m.page = i;
                     m.id = pdf_to_num(c, ref);
@@ -838,6 +860,8 @@ QVector<MarkupNote> Document::markups()
                         // PDF order: upper-left, upper-right, lower-left, lower-right
                         m.quads.push_back(QPolygonF({pt(0), pt(1), pt(3), pt(2)}));
                     }
+                    // MuPDF draws the icon 16 pt wide at the top left of the rectangle, whatever its size
+                    if (m.kind == AnnotKind::Note) m.rect.setSize(QSizeF(16, 16));
                     if (m.quads.isEmpty()) m.quads.push_back(QPolygonF(m.rect));
                     out.push_back(m);
                 }

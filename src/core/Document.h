@@ -197,8 +197,8 @@ public:
     static void mergeFiles(const QStringList &paths, const QString &outPath);
     static void assemble(const QVector<AssemblyItem> &items, const QString &outPath);
 
-    bool canUndo();
-    bool canRedo();
+    bool canUndo() const { return canUndo_; }
+    bool canRedo() const { return canRedo_; }
     void undo();
     void redo();
 
@@ -234,6 +234,10 @@ private:
     QVector<int> pageKeys_;          // object number and rotation of each page, in turn
     QHash<int, void *> stext_;
     bool modified_ = false, needsPw_ = false;
+    // Noted while the document is locked anyway: asking MuPDF from the GUI, which greys Undo and Redo out
+    // after every edit, could wait behind a long render.
+    bool canUndo_ = false, canRedo_ = false;
+    void noteHistory(fz_context *c);
     quint64 gen_ = 0;
 };
 

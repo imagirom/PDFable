@@ -113,6 +113,12 @@ int main(int argc, char **argv)
     Document *d = tab->doc();
     CHECK(d->pageCount() == 6);
     CHECK(d->outline().size() == 6);
+    QAction *undoAct = nullptr, *redoAct = nullptr;         // greyed out while there is nothing to undo or redo
+    for (QAction *a : w->findChildren<QAction *>()) {
+        if (a->text() == "&Undo") undoAct = a;
+        if (a->text() == "&Redo") redoAct = a;
+    }
+    CHECK(undoAct && redoAct && !undoAct->isEnabled() && !redoAct->isEnabled());
     wait(500);
     w->grab().save(out + "/1_open.png");
 
@@ -286,6 +292,21 @@ int main(int argc, char **argv)
         CHECK(std::fabs((r1.left() - r0.left()) + 40 / (v->zoom() * 96 / 72)) < 1.0);
         wait(400);
         v->viewport()->grab().save(out + "/7_signature_placed.png");
+    }
+
+    // Undo and Redo follow the history
+    {
+        InkData k;
+        InkStroke s;
+        s.pts = {QPointF(60, 700), QPointF(90, 720)};
+        k.strokes.push_back(s);
+        d->addInk(0, k);
+        CHECK(undoAct->isEnabled() && !redoAct->isEnabled());
+        tab->undo();
+        CHECK(redoAct->isEnabled());
+        tab->redo();
+        CHECK(undoAct->isEnabled() && !redoAct->isEnabled());
+        tab->undo();
     }
 
     // page organizer: reorder, rotate, delete, insert, extract, merge

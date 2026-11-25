@@ -151,6 +151,7 @@ void Document::loadBytes(const QByteArray &bytes)
     });
     if (!needsPw_) loadSizes();
     ++gen_;
+    canUndo_ = canRedo_ = false;        // a freshly opened document has no history
     setModified(false);
 }
 
@@ -262,6 +263,7 @@ template <class F> void Document::pageOp(int page, const char *name, F &&f)
                 f(c, pg);
                 pdf_update_page(c, pg);
                 pdf_end_operation(c, doc_);
+                noteHistory(c);
             }
             fz_always(c) fz_drop_page(c, reinterpret_cast<fz_page *>(pg));
             fz_catch(c)
@@ -284,6 +286,7 @@ template <class F> void Document::docOp(const char *name, F &&f)
             {
                 f(c);
                 pdf_end_operation(c, doc_);
+                noteHistory(c);
             }
             fz_catch(c)
             {
@@ -1280,15 +1283,10 @@ void Document::assemble(const QVector<AssemblyItem> &items, const QString &outPa
     });
 }
 
-bool Document::canUndo()
+void Document::noteHistory(fz_context *c)
 {
-    std::lock_guard<std::recursive_mutex> lk(mu_);
-    return doc_ && pdf_can_undo(fzctx(), doc_);
-}
-bool Document::canRedo()
-{
-    std::lock_guard<std::recursive_mutex> lk(mu_);
-    return doc_ && pdf_can_redo(fzctx(), doc_);
+    canUndo_ = pdf_can_undo(c, doc_);
+    canRedo_ = pdf_can_redo(c, doc_);
 }
 void Document::undo()
 {
@@ -1297,6 +1295,7 @@ void Document::undo()
         std::lock_guard<std::recursive_mutex> lk(mu_);
         fzrun([&](fz_context *c) {
             pdf_undo(c, doc_);
+            noteHistory(c);
             int steps = 0;
             clean = pdf_undoredo_state(c, doc_, &steps) == 0;
         });
@@ -1310,7 +1309,7 @@ void Document::redo()
 {
     {
         std::lock_guard<std::recursive_mutex> lk(mu_);
-        fzrun([&](fz_context *c) { pdf_redo(c, doc_); });
+        fzrun([&](fz_context *c) { pdf_redo(c, doc_); noteHistory(c); });
     }
     touched(-1, true);
 }

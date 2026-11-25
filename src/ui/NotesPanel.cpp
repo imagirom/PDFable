@@ -146,7 +146,9 @@ void NoteCard::paintEvent(QPaintEvent *)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-    p.setPen(QPen(isLit() ? noteLineColor(note_.color) : palette().color(QPalette::Mid), isLit() ? 1.5 : 1));
+    // Del and the arrow keys act on the notes while the sidebar has the keyboard, and on the page otherwise:
+    // the selected note shows which, with a stronger outline
+    p.setPen(QPen(isLit() ? noteLineColor(note_.color) : palette().color(QPalette::Mid), keyboard_ ? 2.5 : isLit() ? 1.5 : 1));
     p.setBrush(palette().color(QPalette::Base));
     p.drawRoundedRect(r, 7, 7);
     p.setPen(Qt::NoPen);
@@ -163,6 +165,13 @@ void NoteCard::setEditing(bool on)
     edit_->setFocusPolicy(on ? Qt::StrongFocus : Qt::NoFocus);
     edit_->setContextMenuPolicy(on ? Qt::DefaultContextMenu : Qt::NoContextMenu);
     fitted_ = 0;
+    update();
+}
+
+void NoteCard::setKeyboard(bool on)
+{
+    if (on == keyboard_) return;
+    keyboard_ = on;
     update();
 }
 
@@ -480,6 +489,18 @@ void NotesPanel::relayout()
     update();
 }
 
+void NotesPanel::focusInEvent(QFocusEvent *e)
+{
+    QWidget::focusInEvent(e);
+    updateLit();
+}
+
+void NotesPanel::focusOutEvent(QFocusEvent *e)
+{
+    QWidget::focusOutEvent(e);
+    updateLit();
+}
+
 void NotesPanel::goTo(const MarkupNote &n, bool always)
 {
     const qreal y = mapFromGlobal(view_->viewport()->mapToGlobal(view_->pageToView(n.page, QPointF(n.anchor.x(), lineYOf(n))).toPoint())).y();
@@ -557,7 +578,10 @@ void NotesPanel::updateLinks()
 
 void NotesPanel::updateLit()
 {
-    for (auto it = cards_.cbegin(); it != cards_.cend(); ++it) it.value()->setLit(it.key() == hoveredId_ || it.key() == selectedId_);
+    for (auto it = cards_.cbegin(); it != cards_.cend(); ++it) {
+        it.value()->setLit(it.key() == hoveredId_ || it.key() == selectedId_);
+        it.value()->setKeyboard(it.key() == selectedId_ && hasFocus());
+    }
     updateLinks();
     update();
 }

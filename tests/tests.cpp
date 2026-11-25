@@ -596,6 +596,12 @@ int main(int argc, char **argv)
                 QApplication::sendEvent(n1, &click);
                 wait(50);
                 CHECK(n1->isLit() && !n1->isEditing() && !n2->isLit() && np->hasFocus());     // beside the text: selected only
+                // the selected note is drawn stronger while the sidebar has the keyboard
+                const QImage held = n1->grab().toImage();
+                nv->setFocus();
+                CHECK(n1->isLit() && n1->grab().toImage() != held);
+                np->setFocus();
+                CHECK(n1->grab().toImage() == held);
                 // with the keyboard in the sidebar, Up and Down go from note to note and Enter opens one
                 QKeyEvent down(QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier), up(QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier);
                 QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);

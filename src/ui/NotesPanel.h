@@ -28,6 +28,7 @@ public:
     void startEditing();
     void removeNote();                   // the note only: a marking or stroke stays, a sticky note goes with its text
     bool isEditing() const { return editing_; }
+    void setKeyboard(bool on);           // the selected note while the sidebar has the keyboard: drawn stronger
     void setLit(bool on);                // its marking is selected, or the pointer is on either
     bool isLit() const { return editing_ || lit_; }      // shows the colour of its marking
     void fitWidth(int w);                // also sets the height: grows with the note, a long one scrolls
@@ -52,7 +53,7 @@ private:
     ink::MarkupNote note_;
     QLabel *excerpt_, *meta_;            // quoted text of the marking; author and date of the note
     QPlainTextEdit *edit_;               // shows the note and edits it, so both look the same
-    bool editing_ = false, lit_ = false;
+    bool editing_ = false, lit_ = false, keyboard_ = false;
     int fitted_ = 0;                     // width the height was computed for (0 = compute again)
 };
 
@@ -69,6 +70,8 @@ protected:
     void paintEvent(QPaintEvent *e) override;
     void resizeEvent(QResizeEvent *e) override;
     void keyPressEvent(QKeyEvent *e) override;
+    void focusInEvent(QFocusEvent *e) override;
+    void focusOutEvent(QFocusEvent *e) override;
 private:
     void relayout();
     void goTo(const ink::MarkupNote &n, bool always);    // select a note, and bring its marking into view

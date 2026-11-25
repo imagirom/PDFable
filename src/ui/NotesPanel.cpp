@@ -238,14 +238,17 @@ void NoteCard::mousePressEvent(QMouseEvent *e)
     QFrame::mousePressEvent(e);
 }
 
+void NoteCard::removeNote()
+{
+    finish(false);
+    emit committed(note_.page, note_.id, QString());
+}
+
 void NoteCard::contextMenuEvent(QContextMenuEvent *e)
 {
     QMenu m(this);
     m.addAction(tr("Edit note"), this, &NoteCard::startEditing);
-    m.addAction(tr("Delete note"), this, [this] {
-        finish(false);
-        emit committed(note_.page, note_.id, QString());
-    });
+    m.addAction(tr("Delete note"), this, &NoteCard::removeNote);
     m.addAction(tr("Delete marking and note"), this, [this] { emit deleteMarking(note_.page, note_.id); });
     m.exec(e->globalPos());
 }
@@ -483,7 +486,7 @@ void NotesPanel::goTo(const MarkupNote &n, bool always)
 }
 
 // With the keyboard in the sidebar (after a click on a note): Up and Down go to the previous and the
-// next note in the document, Enter opens the selected one, Esc goes back to the page.
+// next note in the document, Enter opens the selected one, Del removes it, Esc goes back to the page.
 void NotesPanel::keyPressEvent(QKeyEvent *e)
 {
     QVector<MarkupNote> order;
@@ -505,6 +508,13 @@ void NotesPanel::keyPressEvent(QKeyEvent *e)
     case Qt::Key_Return:
     case Qt::Key_Enter:
         if (at >= 0) cards_.value(order[at].id)->startEditing();
+        return;
+    case Qt::Key_Delete:        // not Backspace: too easily pressed in the belief of being in a text field
+        if (at >= 0) {
+            const int next = at + 1 < order.size() ? at + 1 : at - 1;
+            cards_.value(order[at].id)->removeNote();
+            if (next >= 0) goTo(order[next], false);     // stay among the notes
+        }
         return;
     case Qt::Key_Escape: view_->setFocus(); return;
     default: QWidget::keyPressEvent(e);

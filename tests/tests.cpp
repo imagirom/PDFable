@@ -615,6 +615,17 @@ int main(int argc, char **argv)
                 CHECK(n2->isEditing() && n2->isLit() && !n1->isLit());
                 QApplication::sendEvent(n2->findChild<QPlainTextEdit *>(), &esc);
                 wait(100);
+                // Del removes the selected note, not its marking, and the next note becomes the selected one
+                QApplication::sendEvent(n1, &click);
+                QKeyEvent remove(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
+                QApplication::sendEvent(np, &remove);
+                wait(400);
+                bool marked = false;
+                for (const AnnotInfo &a : nd->annots(1)) marked = marked || a.id == id;
+                CHECK(np->noteCount() == 1 && !np->card(id) && marked && n2->isLit());
+                nd->undo();
+                wait(400);
+                CHECK(np->noteCount() == 2 && np->card(id));
             }
         }
         nt->window()->grab().save(out + "/9c_notes.png");

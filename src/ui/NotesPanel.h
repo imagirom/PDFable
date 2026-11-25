@@ -26,6 +26,7 @@ public:
     void setNote(const ink::MarkupNote &n);
     const ink::MarkupNote &note() const { return note_; }
     void startEditing();
+    void removeNote();                   // the note only: a marking or stroke stays, a sticky note goes with its text
     bool isEditing() const { return editing_; }
     void setLit(bool on);                // its marking is selected, or the pointer is on either
     bool isLit() const { return editing_ || lit_; }      // shows the colour of its marking

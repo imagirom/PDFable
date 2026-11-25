@@ -600,6 +600,13 @@ int main(int argc, char **argv)
                 QApplication::sendEvent(n1->findChild<QPlainTextEdit *>(), &esc);
                 wait(100);
                 CHECK(n1->isLit() && !n1->isEditing() && !n2->isLit() && np->hasFocus());
+                // Enter opens the note of the selected marking also with the keyboard on the page
+                nv->setFocus();
+                QApplication::sendEvent(nv, &enter);
+                wait(50);
+                CHECK(n1->isEditing());
+                QApplication::sendEvent(n1->findChild<QPlainTextEdit *>(), &esc);
+                wait(200);
                 // a click on the text itself opens the note
                 QWidget *text = n2->findChild<QPlainTextEdit *>()->viewport();
                 QMouseEvent type(QEvent::MouseButtonPress, QPointF(5, 5), text->mapToGlobal(QPointF(5, 5)), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);

@@ -47,8 +47,8 @@ colour.*
   type; the note appears in the sidebar's "Notes" tab at the height of the marking, joined to it by a fine
   line. Click the text of a note to edit it (Ctrl+Enter or a click elsewhere saves, Esc cancels); right-click
   to delete. A click on a note beside its text selects it: where notes pile up, the selected one moves to
-  the height of its marking and the others make room. Up and Down then go from note to note, Enter
-  opens the selected one, Esc returns to the page.
+  the height of its marking and the others make room. Up and Down then go from note to note, Esc
+  returns to the page. Enter opens the note of whatever is selected, in the sidebar or on the page.
   Click a marking to select it (Del removes it); double-click it, or tap it twice with the pen, to write
   or edit its note.
   The lines are grey; a note shows the colour of its marking, on its line and around the marking, while

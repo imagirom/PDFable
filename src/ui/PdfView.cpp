@@ -952,6 +952,11 @@ void PdfView::keyPressEvent(QKeyEvent *e)
     case Qt::Key_Escape: cancelModes(); return;
     case Qt::Key_Delete:
     case Qt::Key_Backspace: deleteSelectedAnnot(); return;
+    case Qt::Key_Return:
+    case Qt::Key_Enter:     // the note of the selected marking, sticky note or stroke, like a double-click on it
+        if (annPage_ < 0 || isPreview_ || !(isMarkup(ann_.kind) || ann_.kind == AnnotKind::Note || ann_.kind == AnnotKind::Ink)) break;
+        emit noteRequested(annPage_, ann_.id);
+        return;
     case Qt::Key_PageDown:
     case Qt::Key_Space: v->setValue(v->value() + (e->modifiers() & Qt::ShiftModifier ? -1 : 1) * int(viewport()->height() * 0.9)); return;
     case Qt::Key_PageUp: v->setValue(v->value() - int(viewport()->height() * 0.9)); return;

@@ -12,6 +12,7 @@ class PdfView;
 class QLabel;
 class QPlainTextEdit;
 class QToolButton;
+class QVariantAnimation;
 
 // Where the cards of the notes go. Each wants to sit at the height of its marking (`want`, ascending) and
 // is `heights[i]` tall; cards must not overlap. Without a pinned card they give way downwards. The
@@ -85,6 +86,11 @@ private:
     QHash<int, QPair<QPointF, qreal>> lineYs_;   // per stroke: its anchor and the height its line runs at
     QVector<QPair<qreal, NoteCard *>> placed_;   // anchor y in panel coordinates, card
     int editingId_ = 0, hoveredId_ = 0, selectedId_ = 0;
+    // When another note becomes the selected one the cards slide to their new places, so that the eye
+    // can follow which went where. Scrolling and zooming move them at once: they must stay with the page.
+    QVariantAnimation *slide_;
+    QHash<NoteCard *, QPair<int, int>> sliding_;     // card: y it started from, y it is going to
+    int pinnedId_ = 0;
     int placedId_ = 0;                   // the sticky note just put on the page: removed again if it gets no text
     QToolButton *above_, *below_;        // "3 notes above": notes outside the part of the document in view
     int aboveId_ = 0, belowId_ = 0;      // the nearest of them, where a click on the hint goes

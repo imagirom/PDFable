@@ -9,7 +9,9 @@
 #include <QPlainTextEdit>
 #include <QScrollBar>
 #include <QTextLayout>
+#include <QStyle>
 #include <QToolButton>
+#include <QVariantAnimation>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
@@ -256,6 +258,16 @@ NotesPanel::NotesPanel(std::shared_ptr<Document> doc, PdfView *view, QWidget *pa
     setBackgroundRole(QPalette::Window);
     setMinimumWidth(170);
     setFocusPolicy(Qt::ClickFocus);
+    slide_ = new QVariantAnimation(this);
+    slide_->setStartValue(0.0);
+    slide_->setEndValue(1.0);
+    slide_->setEasingCurve(QEasingCurve::OutCubic);
+    connect(slide_, &QVariantAnimation::valueChanged, this, [this](const QVariant &v) {
+        for (auto it = sliding_.cbegin(); it != sliding_.cend(); ++it)
+            it.key()->move(kSide, int(std::lround(it->first + (it->second - it->first) * v.toDouble())));
+        update();       // the lines to the cards
+    });
+    connect(slide_, &QVariantAnimation::finished, this, [this] { sliding_.clear(); });
     connect(view_, &PdfView::viewChanged, this, &NotesPanel::relayout);
     for (QToolButton **hint : {&above_, &below_}) {
         auto *b = *hint = new QToolButton(this);
@@ -358,6 +370,7 @@ void NotesPanel::reload()
     }
     for (auto it = cards_.begin(); it != cards_.end();) {
         if (!keep.contains(it.key()) && !it.value()->isEditing()) {
+            sliding_.remove(it.value());
             it.value()->deleteLater();
             it = cards_.erase(it);
         } else
@@ -430,15 +443,31 @@ void NotesPanel::relayout()
         if (c->isEditing() || (c->note().id == selectedId_ && pinned < 0)) pinned = i;
     }
     const QVector<qreal> tops = stackNotes(want, heights, kGapY, pinned);
+    const int pinnedId = pinned >= 0 ? items[pinned].c->note().id : 0;
+    // short, and not at all where the system has animations switched off
+    const int ms = qMin(120, style()->styleHint(QStyle::SH_Widget_Animation_Duration, nullptr, this));
+    const bool start = pinnedId != pinnedId_ && isVisible() && ms > 0;
+    pinnedId_ = pinnedId;
+    if (start) sliding_.clear();
     for (int i = 0; i < items.size(); ++i) {
         const Item &it = items[i];
         bool visible = tops[i] + it.c->height() > -200 && tops[i] < height() + 200;
         if (visible || it.c->isEditing()) {
-            it.c->move(kSide, int(tops[i]));
+            const int to = int(tops[i]);
+            if (start && it.c->isVisible() && it.c->y() != to) sliding_.insert(it.c, {it.c->y(), to});
+            else if (sliding_.contains(it.c)) sliding_[it.c].second = to;        // on its way: only the goal moved
+            else it.c->move(kSide, to);
             it.c->show();
             placed_.push_back({it.y, it.c});
-        } else
+        } else {
+            sliding_.remove(it.c);
             it.c->hide();
+        }
+    }
+    if (start && !sliding_.isEmpty()) {
+        slide_->stop();
+        slide_->setDuration(ms);
+        slide_->start();
     }
     showHint(above_, true, nAbove, aboveId_);
     showHint(below_, false, nBelow, belowId_);

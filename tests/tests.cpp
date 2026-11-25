@@ -17,8 +17,10 @@
 #include <QFrame>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QTabWidget>
 #include <QToolButton>
+#include <QTreeWidget>
 #include <QTimer>
 #include <cmath>
 #include <cstdio>
@@ -147,6 +149,28 @@ int main(int argc, char **argv)
     wait(300);
     std::printf("     search=%d\n", v->searchCount());
     CHECK(v->searchCount() >= 6 * 28);
+    // undo and redo of the highlight change nothing else: the frame right after each is the one before (the new
+    // picture is still being rendered), and once it arrives only the highlight differs; hits and selection stay
+    {
+        v->testPointer(0, {190, 400}, -1, 5300);
+        v->testPointer(1, {520, 404}, -1, 5400);
+        v->testPointer(2, {520, 404}, -1, 5500);
+        CHECK(v->hasTextSelection());
+        const int hits = v->searchCount();
+        wait(500);
+        const QImage marked = v->viewport()->grab().toImage();
+        tab->undo();
+        CHECK(d->annots(pg).size() == 3);
+        CHECK(v->viewport()->grab().toImage() == marked);
+        wait(500);
+        const QImage unmarked = v->viewport()->grab().toImage();
+        CHECK(unmarked != marked && v->searchCount() == hits && v->hasTextSelection());
+        tab->redo();
+        CHECK(d->annots(pg).size() == 4);
+        CHECK(v->viewport()->grab().toImage() == unmarked);
+        wait(500);
+        CHECK(v->viewport()->grab().toImage() == marked && v->searchCount() == hits && v->hasTextSelection());
+    }
     v->findNext(true);
     wait(300);
     v->viewport()->grab().save(out + "/4_search_select.png");
@@ -246,16 +270,28 @@ int main(int argc, char **argv)
     }
 
     // page organizer: reorder, rotate, delete, insert, extract, merge
+    // undoing a move of pages of one size is still a change of structure: the outline points at the pages again
+    QTreeWidget *outlineTree = nullptr;
+    for (QTreeWidget *t : tab->findChildren<QTreeWidget *>())
+        if (t->topLevelItemCount() == 6) outlineTree = t;
+    CHECK(outlineTree != nullptr);
+    QListWidget *pageList = tab->findChild<QListWidget *>();
     tab->rearrange({1, 0, 2, 3, 4, 5});
     CHECK(d->selectionText(0, {72, 80}, {200, 95}).startsWith("Section 2"));
+    CHECK(outlineTree->topLevelItem(0)->data(0, Qt::UserRole).toInt() == 1);
     tab->undo();
     CHECK(d->selectionText(0, {72, 80}, {200, 95}).startsWith("Section 1"));
+    CHECK(outlineTree->topLevelItem(0)->data(0, Qt::UserRole).toInt() == 0);
     d->rotatePages({1}, 90);
     CHECK(d->pageSize(1).width() > d->pageSize(1).height());
     d->insertBlank(1, QSizeF(300, 300));
     CHECK(d->pageCount() == 7);
     d->rearrange({0, 2, 3, 4, 5, 6});
-    CHECK(d->pageCount() == 6);
+    CHECK(d->pageCount() == 6 && pageList->count() == 6);
+    tab->undo();                                        // the deleted page comes back, in the Pages list too
+    CHECK(d->pageCount() == 7 && pageList->count() == 7);
+    tab->redo();
+    CHECK(d->pageCount() == 6 && pageList->count() == 6);
     d->extractPages({0, 4}, out + "/extract.pdf");
     Document::mergeFiles({out + "/extract.pdf", sample}, out + "/merged.pdf");
     {
@@ -271,12 +307,16 @@ int main(int argc, char **argv)
     wait(800);
     w->grab().save(out + "/8_pages_panel.png");
 
-    // save, reopen: ink survives with widths; the view keeps showing the pages meanwhile
+    // save, reopen: ink survives with widths; the view keeps showing the pages and the search hits meanwhile
     v->gotoPage(0, 0, false);
+    v->setSearch("kinetic");
     wait(600);
+    const int hitsBefore = v->searchCount();
     const QImage shown = v->viewport()->grab().toImage();
     CHECK(tab->save());
     CHECK(v->viewport()->grab().toImage() == shown);
+    CHECK(hitsBefore > 0 && v->searchCount() == hitsBefore);
+    v->setSearch(QString());
     CHECK(!d->isModified());
     CHECK(d->inkAnnots(0).size() == 4);
     CHECK(!d->inkAnnots(0)[0].data.strokes[0].w.isEmpty());

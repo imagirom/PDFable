@@ -399,10 +399,22 @@ void PdfView::onRendered(const RenderJob &job, const QImage &img)
     viewport()->update();
 }
 
-void PdfView::onPageChanged(int)
+void PdfView::onPageChanged(int page)
 {
     linkCache_.clear();
     fieldCache_.clear();
+    // Undo, redo and saving may change any page: the selected annotation stays selected where it now is, and is let
+    // go of when it is gone. Its id is an object number, which an optimised save renumbers; checking the kind as well
+    // makes it unlikely that the selection lands on another annotation, and if it does, it shows that one.
+    if (page < 0 && annPage_ >= 0) {
+        int kept = -1;
+        for (const AnnotInfo &a : doc_->annots(annPage_))
+            if (a.id == ann_.id && a.kind == ann_.kind) {
+                ann_ = a;
+                kept = annPage_;
+            }
+        annPage_ = kept;
+    }
     viewport()->update();
 }
 
@@ -422,9 +434,10 @@ void PdfView::onStructureChanged()
     for (int i = pending_.size() - 1; i >= 0; --i)
         if (pending_[i].committed) pending_.removeAt(i);
     relayout();
-    // Saving, undo and redo reopen or replay the document, but its pages mostly look as before: keep
-    // their pictures on screen until the new ones arrive, as after any other edit, instead of blanking
-    // the view. Only where pages changed place or size would the old pictures be drawn wrongly.
+    // Reloading a file another program rewrote mostly leaves the page frames where they were: keep the old
+    // pictures on screen until the new ones arrive, as after any other edit, instead of blanking the view.
+    // Where pages of one size swapped places that shows the old pictures for a moment, still better than
+    // blank paper; only where page frames moved or changed size would they be drawn wrongly.
     if (pageRects_ != before) tiles_.clear();
     rebuildOverlay();
     viewport()->update();

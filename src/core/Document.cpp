@@ -198,9 +198,11 @@ void Document::loadSizes()
 {
     std::lock_guard<std::recursive_mutex> lk(mu_);
     QVector<QSizeF> s;
+    QVector<int> keys;
     fzrun([&](fz_context *c) {
         int n = pdf_count_pages(c, doc_);
         s.reserve(n);
+        keys.reserve(2 * n);
         for (int i = 0; i < n; ++i) {
             // Compute the visible size from the page dictionary: much cheaper than loading the page.
             pdf_obj *po = pdf_lookup_page_obj(c, doc_, i);
@@ -212,9 +214,11 @@ void Document::loadSizes()
             float w = std::fabs(mb.x1 - mb.x0) * uu, h = std::fabs(mb.y1 - mb.y0) * uu;
             if (((rot % 360) + 360) % 180 == 90) std::swap(w, h);
             s.push_back(QSizeF(w, h));
+            keys << pdf_to_num(c, po) << rot;
         }
     });
     sizes_ = s;
+    pageKeys_ = keys;
 }
 
 void Document::setModified(bool m)
@@ -230,9 +234,17 @@ void Document::touched(int page, bool structure)
     dropStext(structure ? -1 : page);
     setModified(true);
     if (structure) {
+        // Undo and redo, and some page operations, leave every page where it was, as big and as turned as before
+        // (undoing an ink stroke, say). Then only the content changed, which listeners show without starting over;
+        // a structure change would make them drop the pictures, search hits and selection.
+        const QVector<QSizeF> sizes = sizes_;
+        const QVector<int> keys = pageKeys_;
         loadSizes();
+        structure = sizes_ != sizes || pageKeys_ != keys;
+    }
+    if (structure)
         emit structureChanged();
-    } else
+    else
         emit pageChanged(page);
 }
 
@@ -1354,7 +1366,11 @@ void Document::save(const QString &path, bool optimize)
         loadBytes(f.readAll());
         path_ = QFileInfo(path).absoluteFilePath();
     }
-    emit structureChanged();
+    // The file just written is the document on screen, so its pages are the same: say that every page may have
+    // changed rather than the structure, so the view keeps its pictures, search hits and selection. Every page,
+    // because annotation and field ids are object numbers, which an optimised save renumbers.
+    emit pageChanged(-1);
+    emit saved();
 }
 
 #ifdef PDFABLE_SIGNING

@@ -172,6 +172,11 @@ DocumentTab::DocumentTab(std::shared_ptr<Document> doc, QWidget *parent) : QWidg
         refreshSignatures();
         emit titleChanged();
     });
+    connect(doc_.get(), &Document::saved, this, [this] {
+        watchFile();          // "Save as" moves to another file
+        refreshSignatures();  // their coverage is checked against the bytes on disk
+        emit titleChanged();
+    });
     connect(doc_.get(), &Document::pageChanged, this, [this](int page) {
         // refresh the thumbnail of an edited page lazily
         for (int i = 0; i < pages_->count(); ++i)
@@ -266,7 +271,7 @@ void DocumentTab::rebuildOutline()
 
 void DocumentTab::rebuildPages()
 {
-    if (pages_->count() == doc_->pageCount()) {      // same pages (saved, undo, reordered): keep the list and its
+    if (pages_->count() == doc_->pageCount()) {      // same number (reordered, reloaded): keep the list and its
         for (int i = 0; i < pages_->count(); ++i) {  // previews in place until the new ones are rendered
             QListWidgetItem *it = pages_->item(i);
             it->setText(QString::number(i + 1));

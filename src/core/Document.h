@@ -211,6 +211,7 @@ public:
 signals:
     void pageChanged(int page);      // -1 = all pages
     void structureChanged();         // page count/size/order changed, or reloaded
+    void saved();                    // written to path(), which may be new; the pages are unchanged
     void modifiedChanged(bool);
 
 private:
@@ -230,6 +231,7 @@ private:
     QByteArray data_;
     QString path_, password_;
     QVector<QSizeF> sizes_;
+    QVector<int> pageKeys_;          // object number and rotation of each page, in turn
     QHash<int, void *> stext_;
     bool modified_ = false, needsPw_ = false;
     quint64 gen_ = 0;

@@ -7,6 +7,7 @@
 #include <QAbstractScrollArea>
 #include <QElapsedTimer>
 #include <QHash>
+#include <QSet>
 #include <QTimer>
 #include <functional>
 #include <memory>
@@ -84,6 +85,7 @@ public:
     void setSearch(const QString &text);
     void findNext(bool forward);
     int searchCount() const { return searchTotal_; }
+    bool searching() const { return searchTimer_.isActive(); }
 
     // selection
     bool hasTextSelection() const { return selPage_ >= 0 && !selQuads_.isEmpty(); }
@@ -198,6 +200,8 @@ private:
     void layoutTextEdit();
     void pollPreview();
     void runSearchChunk();
+    void searchPage(int page);
+    void searchInView();
     void pushHistory();
 
     std::shared_ptr<ink::Document> doc_;
@@ -308,7 +312,8 @@ private:
     // search
     QString needle_;
     QHash<int, QVector<QPolygonF>> hits_;
-    int searchNext_ = 0, searchTotal_ = 0, hitPage_ = -1, hitIndex_ = -1;
+    QSet<int> searched_;   // pages searched for needle_ so far; those in view are searched out of turn
+    int searchStart_ = 0, searchNext_ = 0, searchTotal_ = 0, hitPage_ = -1, hitIndex_ = -1;
     QTimer searchTimer_;
 
     // history

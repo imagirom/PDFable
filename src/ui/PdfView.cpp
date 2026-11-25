@@ -414,6 +414,7 @@ void PdfView::onStructureChanged()
     linkCache_.clear();
     fieldCache_.clear();
     hits_.clear();
+    searched_.clear();
     searchTotal_ = 0;
     selPage_ = -1;
     selQuads_.clear();
@@ -1811,33 +1812,60 @@ void PdfView::setSearch(const QString &text)
 {
     needle_ = text;
     hits_.clear();
+    searched_.clear();
     searchTotal_ = 0;
+    searchStart_ = currentPage();
     searchNext_ = 0;
     hitPage_ = hitIndex_ = -1;
     searchTimer_.stop();
-    if (!text.isEmpty()) searchTimer_.start(0);
-    emit searchChanged(0, 0);
+    if (!text.isEmpty()) {
+        // Search the pages in view before the repaint, so their marks are replaced in the same frame and do not
+        // go blank on every keystroke until the background search gets round to them.
+        searchInView();
+        searchTimer_.start(0);
+    }
+    emit searchChanged(searchTotal_, 0);
     viewport()->update();
+}
+
+void PdfView::searchPage(int page)
+{
+    if (searched_.contains(page)) return;
+    searched_.insert(page);
+    QVector<QPolygonF> h = doc_->search(page, needle_);
+    if (h.isEmpty()) return;
+    searchTotal_ += h.size();
+    hits_.insert(page, h);
+}
+
+void PdfView::searchInView()
+{
+    QRectF vp(offset(), QSizeF(viewport()->size()));
+    for (int i = 0; i < pageRects_.size(); ++i) {
+        if (pageRects_[i].bottom() < vp.top()) continue;
+        if (pageRects_[i].top() > vp.bottom()) break;
+        searchPage(i);
+    }
 }
 
 void PdfView::runSearchChunk()
 {
+    // Walk from the page the search started on and wrap round at the end, so the first hit met is the first one
+    // at or after that page, or failing that the first in the document; that is where the view jumps.
     int n = doc_->pageCount();
     for (int k = 0; k < 6 && searchNext_ < n; ++k, ++searchNext_) {
-        QVector<QPolygonF> h = doc_->search(searchNext_, needle_);
-        if (h.isEmpty()) continue;
-        searchTotal_ += h.size();
-        hits_.insert(searchNext_, h);
-        if (hitPage_ < 0 && searchNext_ >= currentPage()) {
-            hitPage_ = searchNext_;
+        int pg = (searchStart_ + searchNext_) % n;
+        searchPage(pg);
+        auto h = hits_.constFind(pg);
+        if (hitPage_ < 0 && h != hits_.constEnd()) {
+            hitPage_ = pg;
             hitIndex_ = 0;
-            gotoPage(hitPage_, qMax(0.0, h[0].boundingRect().top() - 80), false);
+            gotoPage(hitPage_, qMax(0.0, h->at(0).boundingRect().top() - 80), false);
         }
     }
-    if (searchNext_ >= n) {
-        searchTimer_.stop();
-        if (hitPage_ < 0 && searchTotal_ > 0) findNext(true);
-    }
+    // The jump, or the reader scrolling meanwhile, can bring pages into view that the walk has not reached yet.
+    searchInView();
+    if (searchNext_ >= n) searchTimer_.stop();
     emit searchChanged(searchTotal_, 0);
     viewport()->update();
 }

@@ -152,6 +152,99 @@ int main(int argc, char **argv)
     v->viewport()->grab().save(out + "/4_search_select.png");
     v->setSearch(QString());
 
+    // search marks are replaced in the same frame while typing, instead of flashing off until the background search
+    // gets round to the page in view
+    {
+        auto finish = [&] { for (int i = 0; i < 500 && v->searching(); ++i) wait(10); return !v->searching(); };
+        auto visible = [&](int page) {   // the part of a page in view, in viewport pixels
+            QSizeF s = d->pageSize(page);
+            return QRectF(v->pageToView(page, {0, 0}), v->pageToView(page, {s.width(), s.height()})).toAlignedRect().intersected(v->viewport()->rect());
+        };
+        auto marks = [](const QImage &img, const QRect &r) {   // pixels tinted yellow or orange by search marks
+            int n = 0;
+            for (int y = r.top(); y <= r.bottom(); ++y)
+                for (int x = r.left(); x <= r.right(); ++x) {
+                    QColor c = img.pixelColor(x, y);
+                    n += c.red() > 200 && c.green() > 150 && c.red() - c.blue() > 60;
+                }
+            return n;
+        };
+        auto grab = [&] { return v->viewport()->grab().toImage(); };
+        const QString term = "kinetic";
+
+        v->gotoPage(2, 300, false);
+        wait(500);
+        const int cur = v->currentPage();
+        const QRect area = visible(cur);
+        const QPoint topA = v->pageToView(cur, {0, 0}).toPoint();
+        CHECK(marks(grab(), area) == 0);
+        v->setSearch(term);
+        const int early = v->searchCount();
+        const QImage first = grab();
+        std::printf("     right after setSearch: %d hits, %d marked pixels on page %d\n", early, marks(first, area), cur + 1);
+        CHECK(early > 0);
+        CHECK(marks(first, area) > 0);
+        CHECK(finish());
+        // Once finished, the view has jumped to the first hit and drawn it orange: compare the part of the page that is
+        // in view in both grabs, in page pixels, leaving out that hit.
+        const QImage done = grab();
+        const QPoint topB = v->pageToView(cur, {0, 0}).toPoint();
+        const QRect both = area.translated(-topA).intersected(visible(cur).translated(-topB));
+        const QRectF h0 = d->search(cur, term).value(0).boundingRect();
+        const QRect hit = QRectF(v->pageToView(cur, h0.topLeft()), v->pageToView(cur, h0.bottomRight())).toAlignedRect().translated(-topB).adjusted(-3, -3, 3, 3);
+        int compared = 0, differ = 0;
+        for (int y = both.top(); y <= both.bottom(); ++y)
+            for (int x = both.left(); x <= both.right(); ++x)
+                if (!hit.contains(x, y)) {
+                    ++compared;
+                    differ += first.pixel(QPoint(x, y) + topA) != done.pixel(QPoint(x, y) + topB);
+                }
+        std::printf("     compared %d page pixels (%d marked), %d differ\n", compared, marks(done, both.translated(topB)), differ);
+        CHECK(compared > 10000 && marks(done, both.translated(topB)) > 1000 && differ == 0);
+
+        // type the term letter by letter; every other keystroke arrives while the previous background search still runs
+        v->setSearch(QString());
+        bool marked = true;
+        for (int i = 1; i <= term.size(); ++i) {
+            v->setSearch(term.left(i));
+            marked &= marks(grab(), visible(v->currentPage())) > 0;
+            if (i % 2) {
+                QCoreApplication::processEvents();
+                marked &= marks(grab(), visible(v->currentPage())) > 0;
+            }
+        }
+        CHECK(marked);
+        CHECK(finish());
+        QVector<int> perPage;
+        int total = 0;
+        for (int p = 0; p < d->pageCount(); ++p) total += perPage.emplace_back(int(d->search(p, term).size()));
+        std::printf("     %d hits, the pages hold %d\n", v->searchCount(), total);
+        CHECK(v->searchCount() == total);
+
+        // Started further down, the view jumps to the first hit at or after the page in view (wrapping round), and
+        // findNext goes from there through every hit once in each direction and comes back to it.
+        v->setSearch(QString());
+        v->gotoPage(4, 200, false);
+        int q = v->currentPage();
+        v->setSearch(term);
+        CHECK(finish());
+        while (perPage[q % perPage.size()] == 0) ++q;
+        int ordinal0 = 1;
+        for (int p = 0; p < q % perPage.size(); ++p) ordinal0 += perPage[p];
+        QVector<int> seen;
+        auto conn = QObject::connect(v, &PdfView::searchChanged, [&](int, int c) { seen.push_back(c); });
+        for (int i = 0; i < total; ++i) v->findNext(true);
+        for (int i = 0; i < total; ++i) v->findNext(false);
+        QObject::disconnect(conn);
+        bool fwd = seen.size() == 2 * total, back = fwd;
+        int o = ordinal0;
+        for (int i = 0; i < total && fwd; ++i) { o = o % total + 1; fwd = seen[i] == o; }
+        for (int i = 0; i < total && back; ++i) { o = (o + total - 2) % total + 1; back = seen[total + i] == o; }
+        CHECK(fwd);
+        CHECK(back);
+        v->setSearch(QString());
+    }
+
     // link hover preview
     v->gotoPage(0, 600, false);
     wait(200);

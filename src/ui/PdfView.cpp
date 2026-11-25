@@ -36,8 +36,6 @@ static const qreal kGap = 12, kMargin = 12;
 static bool isMarkup(AnnotKind k) { return k == AnnotKind::Highlight || k == AnnotKind::Underline || k == AnnotKind::StrikeOut; }
 static bool hasHandles(AnnotKind k) { return k == AnnotKind::Ink || k == AnnotKind::FreeText || k == AnnotKind::Stamp; }   // can be resized
 
-// The same hue, deep and saturated. Mid lightness shows on light and on dark paper alike;
-// darker() would turn yellow olive.
 // Rounds the corners of an outline made of straight edges.
 static QPainterPath roundedCorners(const QPainterPath &path, qreal r)
 {
@@ -61,6 +59,8 @@ static QPainterPath roundedCorners(const QPainterPath &path, qreal r)
     return out;
 }
 
+// The same hue, deep and saturated. Mid lightness shows on light and on dark paper alike;
+// darker() would turn yellow olive.
 QColor noteLineColor(const QColor &c)
 {
     float h, s, l;
@@ -1423,7 +1423,7 @@ void PdfView::onHold()
 
 void PdfView::eraseAt(int page, QPointF pt)
 {
-    if (erasePage_ != page || eraseGen_ != doc_->generation()) flushInk();
+    flushInk();     // strokes not yet committed are not in the cache
     inksFor(page);
     QVector<int> ids;
     qreal radius = 6 / ppp();
@@ -1593,6 +1593,7 @@ void PdfView::addNote(int page, QPointF pt)
         emit toolChangeRequested(Tool::Select);
         for (const AnnotInfo &a : doc_->annots(page))
             if (a.id == id) selectAnnot(page, a);
+        emit notePlaced(id);
         emit noteRequested(page, id);
     } catch (const PdfError &err) { emit statusMessage(err.message()); }
 }

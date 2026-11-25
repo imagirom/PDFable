@@ -129,6 +129,7 @@ signals:
     void noteRequested(int page, int annotId);   // open the note of a marking
     void noteHovered(int annotId);               // pointer over a marking with a note (0 = left it)
     void noteSelected(int annotId);              // the selected annotation (0 = none)
+    void notePlaced(int annotId);                // a sticky note was just put on the page, still without text
 
 protected:
     void paintEvent(QPaintEvent *e) override;

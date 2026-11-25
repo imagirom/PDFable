@@ -835,13 +835,16 @@ void Document::setAnnotContents(int page, int id, const QString &text)
     pageOp(page, "Note", [&](fz_context *c, pdf_page *pg) {
         pdf_annot *a = findAnnot(c, pg, id);
         pdf_set_annot_contents(c, a, text.toUtf8().constData());
-        if (text.isEmpty()) return;
-        // who and when, as other readers record and show it; MuPDF writes neither by itself.
-        // The author is the one who wrote the note first, a later edit only changes the date.
-        if (!s_author.isEmpty() && !pdf_dict_get(c, pdf_annot_obj(c, a), PDF_NAME(T))) pdf_set_annot_author(c, a, s_author.toUtf8().constData());
-        pdf_set_annot_modification_date(c, a, int64_t(std::time(nullptr)));
-        // MuPDF now wants to redraw the annotation its own way: a stroke would lose its variable
-        // width, and a highlighter stroke would cover the text instead of tinting it
+        if (text.isEmpty())
+            pdf_dict_del(c, pdf_annot_obj(c, a), PDF_NAME(Contents));      // the note is gone: leave no empty entry
+        else {
+            // who and when, as other readers record and show it; MuPDF writes neither by itself.
+            // The author is the one who wrote the note first, a later edit only changes the date.
+            if (!s_author.isEmpty() && !pdf_dict_get(c, pdf_annot_obj(c, a), PDF_NAME(T))) pdf_set_annot_author(c, a, s_author.toUtf8().constData());
+            pdf_set_annot_modification_date(c, a, int64_t(std::time(nullptr)));
+        }
+        // MuPDF now wants to redraw the annotation its own way, also after a note was removed: a stroke
+        // would lose its variable width, and a highlighter stroke would cover the text instead of tinting it
         if (pdf_annot_type(c, a) == PDF_ANNOT_INK) writeInk(c, doc_, pg, a, readInk(c, a));
     });
 }
@@ -906,14 +909,21 @@ QVector<MarkupNote> Document::markups(int withId)
                         pdf_obj *list = pdf_dict_get(c, ref, PDF_NAME(InkList));
                         pdf_obj *widths = pdf_dict_gets(c, ref, "PDFableWidths");
                         qreal width = pdf_to_real(c, pdf_dict_getl(c, ref, PDF_NAME(BS), PDF_NAME(W), nullptr));
+                        auto point = [&](pdf_obj *st, int k2) {
+                            return qp_point(fz_transform_point(fz_make_point(pdf_array_get_real(c, st, k2), pdf_array_get_real(c, st, k2 + 1)), ctm));
+                        };
+                        // the leftmost point; of those about equally far left (a vertical line) the lowest
+                        qreal minX = 1e30;
+                        for (int si = 0; si < pdf_array_len(c, list); ++si)
+                            for (int k2 = 0; k2 + 1 < pdf_array_len(c, pdf_array_get(c, list, si)); k2 += 2)
+                                minX = qMin(minX, point(pdf_array_get(c, list, si), k2).x());
                         bool any = false;
                         for (int si = 0; si < pdf_array_len(c, list); ++si) {
                             pdf_obj *st = pdf_array_get(c, list, si);
                             pdf_obj *sw = pdf_array_get(c, widths, si);
                             for (int k2 = 0; k2 + 1 < pdf_array_len(c, st); k2 += 2) {
-                                QPointF pt = qp_point(fz_transform_point(fz_make_point(pdf_array_get_real(c, st, k2), pdf_array_get_real(c, st, k2 + 1)), ctm));
-                                // leftmost; of several about equally far left (a vertical line) the lowest
-                                if (any && !(pt.x() < m.anchor.x() - 1 || (pt.x() < m.anchor.x() + 1 && pt.y() > m.anchor.y()))) continue;
+                                const QPointF pt = point(st, k2);
+                                if (pt.x() > minX + 1 || (any && pt.y() <= m.anchor.y())) continue;
                                 m.anchor = pt;
                                 if (pdf_array_len(c, sw) * 2 == pdf_array_len(c, st)) width = pdf_array_get_real(c, sw, k2 / 2);
                                 any = true;

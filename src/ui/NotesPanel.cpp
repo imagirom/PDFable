@@ -255,6 +255,7 @@ NotesPanel::NotesPanel(std::shared_ptr<Document> doc, PdfView *view, QWidget *pa
     }
     connect(view_, &PdfView::noteHovered, this, [this](int id) { hoveredId_ = id; updateLit(); });
     connect(view_, &PdfView::noteSelected, this, [this](int id) { selectedId_ = id; updateLit(); });
+    connect(view_, &PdfView::notePlaced, this, [this](int id) { placedId_ = id; });
 }
 
 int NotesPanel::noteCount() const
@@ -304,17 +305,19 @@ void NotesPanel::reload()
                     if (text.isEmpty() && c && c->note().kind == AnnotKind::Note) doc_->removeAnnots(page, {id});
                     else doc_->setAnnotContents(page, id, text);
                 } catch (const PdfError &) {}
+                if (placedId_ == id) placedId_ = 0;
                 reload();
             });
             connect(c, &NoteCard::cancelled, this, [this](int id) {
                 if (editingId_ == id) editingId_ = 0;
                 NoteCard *c = cards_.value(id);
-                if (c && c->note().kind == AnnotKind::Note && c->note().text.isEmpty()) {     // placed, then not written
+                if (c && id == placedId_ && c->note().text.isEmpty()) {     // placed, then not written; an older empty one stays
                     try {
                         view_->flushInk();
                         doc_->removeAnnots(c->note().page, {id});
                     } catch (const PdfError &) {}
                 }
+                if (placedId_ == id) placedId_ = 0;
                 QTimer::singleShot(0, this, &NotesPanel::reload);
             });
             connect(c, &NoteCard::deleteMarking, this, [this](int page, int id) {

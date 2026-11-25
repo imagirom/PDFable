@@ -669,6 +669,21 @@ int main(int argc, char **argv)
         if (sc) key(sc->findChild<QPlainTextEdit *>(), Qt::Key_Escape);
         wait(300);
         CHECK(stickies().size() == 1);                       // a written note survives Esc
+        // so does an empty sticky note that was already in the file, e.g. from another program
+        {
+            int old = nd->addNote(1, QPointF(470, 250), QColor(255, 235, 60));
+            wait(300);
+            QPointF on = nv->pageToView(1, QPointF(470, 250));
+            QMouseEvent open(QEvent::MouseButtonDblClick, on, nv->viewport()->mapToGlobal(on), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(nv->viewport(), &open);
+            wait(50);
+            CHECK(np->card(old) && np->card(old)->isEditing());
+            if (np->card(old)) key(np->card(old)->findChild<QPlainTextEdit *>(), Qt::Key_Escape);
+            wait(300);
+            CHECK(stickies().size() == 2);
+            nd->removeAnnots(1, {old});
+            wait(300);
+        }
         sc = np->card(sid);
         CHECK(sc && sc->isVisible() && sc->height() > 20);  // a card without a quoted excerpt
         nt->window()->grab().save(out + "/9d_sticky.png");
@@ -753,7 +768,23 @@ int main(int argc, char **argv)
             QApplication::sendEvent(nv->viewport(), &mv);
             CHECK(np->card(hid) && np->card(hid)->isLit());
             nt->window()->grab().save(out + "/9g_highlighter_lit.png");
+            // removing the note again leaves the stroke as it was, and no empty comment behind
+            nd->setAnnotContents(1, hid, QString());
+            bool listed = false;
+            for (const MarkupNote &m : nd->markups()) listed = listed || m.id == hid;
+            CHECK(nd->render(1, 2.0, clip) == plain && !listed);
             nd->removeAnnots(1, {hid});
+            // the line ends at the leftmost point, also when the stroke runs down to the right in small steps
+            InkData dg;
+            InkStroke ds;
+            for (int j = 0; j <= 120; ++j) ds.pts.push_back(QPointF(300 + j * 0.5, 400 + j * 0.5));
+            dg.strokes.push_back(ds);
+            dg.width = 2;
+            int did = nd->addInk(1, dg);
+            nd->setAnnotContents(1, did, "Diagonal.");
+            for (const MarkupNote &m : nd->markups())
+                if (m.id == did) CHECK(QLineF(m.anchor, QPointF(300 - dg.width / 2 - 1.5, 400)).length() < 2);     // not (358, 460)
+            nd->removeAnnots(1, {did});
             wait(300);
         }
         QRectF r0;

@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QLabel>
 #include <QScrollBar>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
 #include <QMouseEvent>
@@ -23,6 +24,7 @@
 #include <QTreeWidget>
 #include <QTimer>
 #include <cmath>
+#include <functional>
 #include <cstdio>
 
 using namespace ink;
@@ -34,6 +36,26 @@ static void wait(int ms)
     QEventLoop l;
     QTimer::singleShot(ms, &l, &QEventLoop::quit);
     l.exec();
+}
+
+// Run the event loop until cond holds, at most ms milliseconds: renders arrive from a worker thread, whose pace
+// depends on the machine.
+static bool waitFor(const std::function<bool()> &cond, int ms = 20000)
+{
+    QElapsedTimer t;
+    t.start();
+    while (!cond()) {
+        if (t.elapsed() > ms) return false;
+        wait(20);
+    }
+    return true;
+}
+
+// The view once everything it shows is rendered and searched (painting asks for the pictures still missing).
+static QImage settled(PdfView *v)
+{
+    waitFor([v] { v->viewport()->grab(); return !v->testBusy(); });
+    return v->viewport()->grab().toImage();
 }
 
 int main(int argc, char **argv)
@@ -156,20 +178,17 @@ int main(int argc, char **argv)
         v->testPointer(1, {520, 404}, -1, 5400);
         v->testPointer(2, {520, 404}, -1, 5500);
         CHECK(v->hasTextSelection());
+        const QImage marked = settled(v);
         const int hits = v->searchCount();
-        wait(500);
-        const QImage marked = v->viewport()->grab().toImage();
         tab->undo();
         CHECK(d->annots(pg).size() == 3);
         CHECK(v->viewport()->grab().toImage() == marked);
-        wait(500);
-        const QImage unmarked = v->viewport()->grab().toImage();
+        const QImage unmarked = settled(v);
         CHECK(unmarked != marked && v->searchCount() == hits && v->hasTextSelection());
         tab->redo();
         CHECK(d->annots(pg).size() == 4);
         CHECK(v->viewport()->grab().toImage() == unmarked);
-        wait(500);
-        CHECK(v->viewport()->grab().toImage() == marked && v->searchCount() == hits && v->hasTextSelection());
+        CHECK(settled(v) == marked && v->searchCount() == hits && v->hasTextSelection());
     }
     v->findNext(true);
     wait(300);
@@ -279,9 +298,11 @@ int main(int argc, char **argv)
     tab->rearrange({1, 0, 2, 3, 4, 5});
     CHECK(d->selectionText(0, {72, 80}, {200, 95}).startsWith("Section 2"));
     CHECK(outlineTree->topLevelItem(0)->data(0, Qt::UserRole).toInt() == 1);
+    pageList->item(0)->setSelected(true);
     tab->undo();
     CHECK(d->selectionText(0, {72, 80}, {200, 95}).startsWith("Section 1"));
     CHECK(outlineTree->topLevelItem(0)->data(0, Qt::UserRole).toInt() == 0);
+    CHECK(pageList->selectedItems().isEmpty());          // the selected row now holds another page: Delete must not hit it
     d->rotatePages({1}, 90);
     CHECK(d->pageSize(1).width() > d->pageSize(1).height());
     d->insertBlank(1, QSizeF(300, 300));
@@ -310,9 +331,8 @@ int main(int argc, char **argv)
     // save, reopen: ink survives with widths; the view keeps showing the pages and the search hits meanwhile
     v->gotoPage(0, 0, false);
     v->setSearch("kinetic");
-    wait(600);
+    const QImage shown = settled(v);
     const int hitsBefore = v->searchCount();
-    const QImage shown = v->viewport()->grab().toImage();
     CHECK(tab->save());
     CHECK(v->viewport()->grab().toImage() == shown);
     CHECK(hitsBefore > 0 && v->searchCount() == hitsBefore);
@@ -320,6 +340,44 @@ int main(int argc, char **argv)
     CHECK(!d->isModified());
     CHECK(d->inkAnnots(0).size() == 4);
     CHECK(!d->inkAnnots(0)[0].data.strokes[0].w.isEmpty());
+
+    // an optimised save renumbers the objects, so the old id of a selected stroke may now name another one: Delete
+    // must then remove the selected stroke or nothing, never a different one
+    {
+        const int sp = 5, chosen = 0;
+        for (int k = 0; k < 20; ++k) {
+            InkData s;
+            s.strokes = {InkStroke{{QPointF(100, 100 + 30 * k), QPointF(400, 100 + 30 * k)}, {}}};
+            s.width = 6;
+            d->addInk(sp, s);
+        }
+        auto rowOf = [](const InkAnnot &a) { return qRound((a.data.bounds().center().y() - 100) / 30); };
+        auto rows = [&] {
+            QVector<int> r;
+            for (const InkAnnot &a : d->inkAnnots(sp)) r.push_back(rowOf(a));
+            std::sort(r.begin(), r.end());
+            return r;
+        };
+        int oldId = 0;
+        for (const InkAnnot &a : d->inkAnnots(sp))
+            if (rowOf(a) == chosen) oldId = a.id;
+        const QVector<int> before = rows();
+        v->gotoPage(sp, 0, false);
+        w->setTool(Tool::Select);
+        const QPointF at = v->pageToView(sp, {250, 100 + 30.0 * chosen});
+        v->testPointer(0, at, -1, 20000);
+        v->testPointer(2, at, -1, 20050);
+        d->save(d->path(), true);
+        bool taken = false;            // the case under test: the old id now belongs to another stroke
+        for (const InkAnnot &a : d->inkAnnots(sp)) taken = taken || (a.id == oldId && rowOf(a) != chosen);
+        CHECK(taken);
+        QKeyEvent del(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
+        QApplication::sendEvent(v, &del);
+        QVector<int> expect = before;
+        expect.removeOne(chosen);
+        CHECK(rows() == before || rows() == expect);
+        CHECK(tab->save());
+    }
 
     // view state round trip, night mode, area copy, reload after an external change
     {

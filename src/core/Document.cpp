@@ -1337,6 +1337,7 @@ bool Document::hasSignatures()
 
 void Document::save(const QString &path, bool optimize)
 {
+    bool same = false;
     {
         std::lock_guard<std::recursive_mutex> lk(mu_);
         QString tmp = path + QStringLiteral(".tmp~");
@@ -1363,13 +1364,19 @@ void Document::save(const QString &path, bool optimize)
         replaceFile(tmp, path);
         QFile f(path);
         if (!f.open(QIODevice::ReadOnly)) throw PdfError(tr("Cannot re-open %1").arg(path));
+        const QVector<QSizeF> sizes = sizes_;
         loadBytes(f.readAll());
         path_ = QFileInfo(path).absoluteFilePath();
+        same = sizes_ == sizes;
     }
     // The file just written is the document on screen, so its pages are the same: say that every page may have
     // changed rather than the structure, so the view keeps its pictures, search hits and selection. Every page,
-    // because annotation and field ids are object numbers, which an optimised save renumbers.
-    emit pageChanged(-1);
+    // because annotation and field ids are object numbers, which an optimised save renumbers (so the page keys
+    // may differ too, and are not compared). Should the file read back differ after all, say so.
+    if (same)
+        emit pageChanged(-1);
+    else
+        emit structureChanged();
     emit saved();
 }
 

@@ -403,17 +403,15 @@ void PdfView::onPageChanged(int page)
 {
     linkCache_.clear();
     fieldCache_.clear();
-    // Undo, redo and saving may change any page: the selected annotation stays selected where it now is, and is let
-    // go of when it is gone. Its id is an object number, which an optimised save renumbers; checking the kind as well
-    // makes it unlikely that the selection lands on another annotation, and if it does, it shows that one.
+    // Undo, redo and saving may change any page: keep the selected annotation only while it is still there unchanged.
+    // Its id alone is not enough: it is an object number, and an optimised save renumbers the objects, so the old
+    // number often names another stroke on the same page, which Delete or a drag would then act on. An undo that
+    // moved or resized the annotation lets go of it, as every undo did before.
     if (page < 0 && annPage_ >= 0) {
-        int kept = -1;
+        bool same = false;
         for (const AnnotInfo &a : doc_->annots(annPage_))
-            if (a.id == ann_.id && a.kind == ann_.kind) {
-                ann_ = a;
-                kept = annPage_;
-            }
-        annPage_ = kept;
+            same = same || (a.id == ann_.id && a.kind == ann_.kind && a.rect == ann_.rect);
+        if (!same) annPage_ = -1;
     }
     viewport()->update();
 }

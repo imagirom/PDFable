@@ -278,6 +278,7 @@ void DocumentTab::rebuildPages()
             it->setData(Qt::UserRole, i);
             it->setData(Qt::UserRole + 1, false);
         }
+        pages_->clearSelection();   // a selected row may now hold another page, which Delete or Rotate would act on
         QTimer::singleShot(0, this, &DocumentTab::requestThumbs);
         return;
     }

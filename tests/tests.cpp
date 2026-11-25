@@ -379,6 +379,35 @@ int main(int argc, char **argv)
         CHECK(tab->save());
     }
 
+    // undoing back to the saved state leaves nothing to save, in the title and when closing; redo or another edit
+    // changes that again
+    {
+        auto stroke = [](qreal y) { InkData s; s.strokes = {InkStroke{{QPointF(100, y), QPointF(300, y)}, {}}}; return s; };
+        auto starred = [&] { return tab->title().endsWith(" *") && w->windowTitle().contains(" *"); };
+        CHECK(!d->isModified() && !starred());
+        d->addInk(4, stroke(700));
+        CHECK(d->isModified() && starred());
+        tab->undo();
+        CHECK(!d->isModified() && !starred());
+        {
+            QTimer answer;            // should the "save changes?" question come up, cancel it rather than hang
+            answer.setSingleShot(true);
+            QObject::connect(&answer, &QTimer::timeout, [] { if (QWidget *m = QApplication::activeModalWidget()) m->close(); });
+            answer.start(1000);
+            CHECK(tab->maybeSave());
+        }
+        tab->redo();
+        CHECK(d->isModified() && starred());
+        tab->undo();
+        d->addInk(4, stroke(720));    // a different edit from the saved state
+        CHECK(d->isModified() && !d->canRedo());
+        d->addInk(4, stroke(740));
+        tab->undo();                  // one of two edits undone: still one to save
+        CHECK(d->isModified());
+        CHECK(tab->save());
+        CHECK(!d->isModified() && !starred());
+    }
+
     // view state round trip, night mode, area copy, reload after an external change
     {
         v->setZoom(1.37);
@@ -645,6 +674,18 @@ int main(int argc, char **argv)
         auto sigs = d->signatures({});
         CHECK(sigs.size() == 1 && sigs[0].digestOk && sigs[0].coversWholeFile && !sigs[0].trusted);
         CHECK(d->signatures({sigs[0].certDer})[0].trusted);
+        // a signed file is saved incrementally, but the undo history still starts afresh from the file on disk
+        InkData s;
+        s.strokes = {InkStroke{{QPointF(100, 600), QPointF(300, 600)}, {}}};
+        CHECK(!d->isModified());
+        d->addInk(1, s);
+        tab->undo();
+        CHECK(!d->isModified());
+        d->addInk(1, s);
+        CHECK(tab->save() && !d->isModified());
+        d->addInk(1, s);
+        tab->undo();
+        CHECK(!d->isModified() && d->signatures({})[0].digestOk);
     }
 #endif
     std::printf("%s (%d failure%s)\n", fails ? "FAILED" : "ALL PASSED", fails, fails == 1 ? "" : "s");

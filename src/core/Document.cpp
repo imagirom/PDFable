@@ -1292,11 +1292,19 @@ bool Document::canRedo()
 }
 void Document::undo()
 {
+    bool clean = false;
     {
         std::lock_guard<std::recursive_mutex> lk(mu_);
-        fzrun([&](fz_context *c) { pdf_undo(c, doc_); });
+        fzrun([&](fz_context *c) {
+            pdf_undo(c, doc_);
+            int steps = 0;
+            clean = pdf_undoredo_state(c, doc_, &steps) == 0;
+        });
     }
     touched(-1, true);
+    // The undo history starts afresh whenever the file is loaded or saved, and every edit is a step in it (MuPDF
+    // refuses changes outside an operation), so its start is the file on disk: back there, there is nothing to save.
+    if (clean) setModified(false);
 }
 void Document::redo()
 {

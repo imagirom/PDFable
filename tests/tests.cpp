@@ -271,8 +271,12 @@ int main(int argc, char **argv)
     wait(800);
     w->grab().save(out + "/8_pages_panel.png");
 
-    // save, reopen: ink survives with widths
+    // save, reopen: ink survives with widths; the view keeps showing the pages meanwhile
+    v->gotoPage(0, 0, false);
+    wait(600);
+    const QImage shown = v->viewport()->grab().toImage();
     CHECK(tab->save());
+    CHECK(v->viewport()->grab().toImage() == shown);
     CHECK(!d->isModified());
     CHECK(d->inkAnnots(0).size() == 4);
     CHECK(!d->inkAnnots(0)[0].data.strokes[0].w.isEmpty());

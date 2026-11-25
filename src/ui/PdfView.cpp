@@ -409,7 +409,7 @@ void PdfView::onPageChanged(int)
 void PdfView::onStructureChanged()
 {
     cancelFieldEdit();
-    tiles_.clear();
+    const QVector<QRectF> before = pageRects_;
     requested_.clear();
     linkCache_.clear();
     fieldCache_.clear();
@@ -422,6 +422,10 @@ void PdfView::onStructureChanged()
     for (int i = pending_.size() - 1; i >= 0; --i)
         if (pending_[i].committed) pending_.removeAt(i);
     relayout();
+    // Saving, undo and redo reopen or replay the document, but its pages mostly look as before: keep
+    // their pictures on screen until the new ones arrive, as after any other edit, instead of blanking
+    // the view. Only where pages changed place or size would the old pictures be drawn wrongly.
+    if (pageRects_ != before) tiles_.clear();
     rebuildOverlay();
     viewport()->update();
     emit currentPageChanged(currentPage());

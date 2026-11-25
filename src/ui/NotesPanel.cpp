@@ -347,6 +347,7 @@ void NotesPanel::reload()
                     else doc_->setAnnotContents(page, id, text);
                 } catch (const PdfError &) {}
                 if (placedId_ == id) placedId_ = 0;
+                if (text.isEmpty()) view_->setFocus();      // its card goes: nothing here for the keyboard to act on
                 reload();
             });
             connect(c, &NoteCard::cancelled, this, [this](int id) {
@@ -359,6 +360,7 @@ void NotesPanel::reload()
                     } catch (const PdfError &) {}
                 }
                 if (placedId_ == id) placedId_ = 0;
+                if (!c || c->note().text.isEmpty()) view_->setFocus();     // a note begun and given up: back to its marking
                 QTimer::singleShot(0, this, &NotesPanel::reload);
             });
             connect(c, &NoteCard::deleteMarking, this, [this](int page, int id) {
@@ -508,12 +510,16 @@ void NotesPanel::keyPressEvent(QKeyEvent *e)
     case Qt::Key_Return:
     case Qt::Key_Enter:
         if (at >= 0) cards_.value(order[at].id)->startEditing();
+        else QCoreApplication::sendEvent(view_, e);     // a selected marking without a note: the page opens one
         return;
     case Qt::Key_Delete:        // not Backspace: too easily pressed in the belief of being in a text field
         if (at >= 0) {
             const int next = at + 1 < order.size() ? at + 1 : at - 1;
             cards_.value(order[at].id)->removeNote();
-            if (next >= 0) goTo(order[next], false);     // stay among the notes
+            if (next >= 0) {        // stay among the notes
+                goTo(order[next], false);
+                setFocus();
+            }
         }
         return;
     case Qt::Key_Escape: view_->setFocus(); return;

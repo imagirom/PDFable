@@ -504,6 +504,16 @@ int main(int argc, char **argv)
         nv->testPointer(2, c, -1, 32010);
         wait(50);
         CHECK(!np->card(id2));                            // a click only selects the marking
+        // Enter opens a note for it; given up with Esc, Enter must open one again
+        for (int round = 0; round < 2; ++round) {
+            QKeyEvent open(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier), giveUp(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+            QApplication::sendEvent(round == 0 ? nv : QApplication::focusWidget(), &open);
+            wait(50);
+            CHECK(np->card(id2) && np->card(id2)->isEditing());
+            if (np->card(id2)) QApplication::sendEvent(np->card(id2)->findChild<QPlainTextEdit *>(), &giveUp);
+            wait(300);
+            CHECK(!np->card(id2));
+        }
         QMouseEvent dbl(QEvent::MouseButtonDblClick, c, nv->viewport()->mapToGlobal(c), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
         QApplication::sendEvent(nv->viewport(), &dbl);
         wait(50);

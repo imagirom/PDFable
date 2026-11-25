@@ -562,6 +562,14 @@ int main(int argc, char **argv)
             nv->testPointer(2, off, -1, 34010);
             // writing another note moves the selection to its marking
             QApplication::sendEvent(nv, &leave);          // the pen hovered over the first marking
+            // undo and redo drop the selection in the view, and the sidebar must follow
+            nv->testPointer(0, on, -1, 34500);
+            nv->testPointer(2, on, -1, 34510);
+            CHECK(np->card(id2) && np->card(id2)->isLit());
+            nd->undo();
+            nd->redo();
+            wait(400);
+            CHECK(np->card(id2) && !np->card(id2)->isLit());
             nv->testPointer(0, on, -1, 35000);
             nv->testPointer(2, on, -1, 35010);
             NoteCard *n1 = np->card(id), *n2 = np->card(id2);

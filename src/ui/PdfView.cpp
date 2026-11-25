@@ -458,7 +458,7 @@ void PdfView::onStructureChanged()
     searchTotal_ = 0;
     selPage_ = -1;
     selQuads_.clear();
-    annPage_ = -1;
+    clearAnnotSelection();      // tells the Notes sidebar too, whose note would stay lit
     erasePage_ = -1;
     for (int i = pending_.size() - 1; i >= 0; --i)
         if (pending_[i].committed) pending_.removeAt(i);

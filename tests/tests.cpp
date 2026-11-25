@@ -424,6 +424,12 @@ int main(int argc, char **argv)
     std::printf("     tabs=%d windows=%d\n", w->tabCount(), int(MainWindow::windows().size()));
     CHECK(w->tabCount() == 2 && MainWindow::windows().size() == 1);
 
+    // where the cards of the notes go: they give way downwards, but the selected one sits at its marking
+    CHECK(stackNotes({10, 20, 200}, {50, 50, 50}, 8) == QVector<qreal>({10, 68, 200}));
+    CHECK(stackNotes({10, 20, 200}, {50, 50, 50}, 8, 1) == QVector<qreal>({-38, 20, 200}));
+    CHECK(stackNotes({10, 20, 30}, {50, 50, 50}, 8, 2) == QVector<qreal>({-86, -28, 30}));
+    CHECK(stackNotes({10, 100, 300}, {50, 50, 50}, 8, 2) == QVector<qreal>({10, 100, 300}));         // nothing in the way
+
     // notes on markings: highlight -> note editor opens in the Notes tab -> typed text is stored
     {
         DocumentTab *nt = w->currentTab();
@@ -579,10 +585,29 @@ int main(int argc, char **argv)
                 QMouseEvent click(QEvent::MouseButtonPress, in, n1->mapToGlobal(in), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
                 QApplication::sendEvent(n1, &click);
                 wait(50);
-                CHECK(n1->isEditing() && !n2->isLit());
+                CHECK(n1->isLit() && !n1->isEditing() && !n2->isLit() && np->hasFocus());     // beside the text: selected only
+                // with the keyboard in the sidebar, Up and Down go from note to note and Enter opens one
+                QKeyEvent down(QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier), up(QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier);
+                QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+                QApplication::sendEvent(np, &down);
+                CHECK(n2->isLit() && !n1->isLit());
+                QApplication::sendEvent(np, &down);           // the last note: stays
+                QApplication::sendEvent(np, &up);
+                CHECK(n1->isLit() && !n2->isLit());
+                QApplication::sendEvent(np, &enter);
+                wait(50);
+                CHECK(n1->isEditing());
                 QApplication::sendEvent(n1->findChild<QPlainTextEdit *>(), &esc);
                 wait(100);
-                CHECK(n1->isLit() && !n1->isEditing() && !n2->isLit());
+                CHECK(n1->isLit() && !n1->isEditing() && !n2->isLit() && np->hasFocus());
+                // a click on the text itself opens the note
+                QWidget *text = n2->findChild<QPlainTextEdit *>()->viewport();
+                QMouseEvent type(QEvent::MouseButtonPress, QPointF(5, 5), text->mapToGlobal(QPointF(5, 5)), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(text, &type);
+                wait(50);
+                CHECK(n2->isEditing() && n2->isLit() && !n1->isLit());
+                QApplication::sendEvent(n2->findChild<QPlainTextEdit *>(), &esc);
+                wait(100);
             }
         }
         nt->window()->grab().save(out + "/9c_notes.png");

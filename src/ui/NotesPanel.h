@@ -13,6 +13,11 @@ class QLabel;
 class QPlainTextEdit;
 class QToolButton;
 
+// Where the cards of the notes go. Each wants to sit at the height of its marking (`want`, ascending) and
+// is `heights[i]` tall; cards must not overlap. Without a pinned card they give way downwards. The
+// pinned one (the selected note) sits exactly at its height, and the cards before it move up for it.
+QVector<qreal> stackNotes(const QVector<qreal> &want, const QVector<int> &heights, int gap, int pinned = -1);
+
 class NoteCard : public QFrame {
     Q_OBJECT
 public:
@@ -30,6 +35,7 @@ signals:
     void deleteMarking(int page, int id);
     void heightChanged();
     void editingStarted();
+    void clicked();                      // beside the text: select the note without editing it
     void hovered(bool on);
 protected:
     void enterEvent(QEnterEvent *e) override;
@@ -60,8 +66,10 @@ public:
 protected:
     void paintEvent(QPaintEvent *e) override;
     void resizeEvent(QResizeEvent *e) override;
+    void keyPressEvent(QKeyEvent *e) override;
 private:
     void relayout();
+    void goTo(const ink::MarkupNote &n, bool always);    // select a note, and bring its marking into view
     void updateLinks();
     void updateLit();                    // after the hovered or the selected note changed
     QPointF anchorOf(const ink::MarkupNote &n) const;

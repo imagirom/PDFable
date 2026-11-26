@@ -613,10 +613,12 @@ int main(int argc, char **argv)
                 QApplication::sendEvent(n1, &click);
                 wait(50);
                 CHECK(n1->isLit() && !n1->isEditing() && !n2->isLit() && np->hasFocus());     // beside the text: selected only
-                // the selected note is drawn stronger while the sidebar has the keyboard
+                // the selected note is tinted in its marking's colour while the sidebar has the keyboard
                 const QImage held = n1->grab().toImage();
+                const QPoint inside(n1->width() - 6, n1->height() / 2);       // card background, clear of text and outline
                 nv->setFocus();
-                CHECK(n1->isLit() && n1->grab().toImage() != held);
+                const QImage plain = n1->grab().toImage();
+                CHECK(n1->isLit() && plain.pixel(inside) != held.pixel(inside));
                 np->setFocus();
                 CHECK(n1->grab().toImage() == held);
                 // with the keyboard in the sidebar, Up and Down go from note to note and Enter opens one
@@ -658,6 +660,7 @@ int main(int argc, char **argv)
                 };
                 typeInto(n1);
                 CHECK(n1->isEditing() && !n2->isEditing());
+                CHECK(n1->grab().toImage().pixel(inside) == held.pixel(inside));       // the note being written is tinted the same
                 typeInto(n2);
                 CHECK(n2->isEditing() && n2->findChild<QPlainTextEdit *>()->hasFocus() && !n1->isEditing());
                 typeInto(n1);

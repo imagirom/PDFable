@@ -28,7 +28,7 @@ public:
     void startEditing();
     void removeNote();                   // the note only: a marking or stroke stays, a sticky note goes with its text
     bool isEditing() const { return editing_; }
-    void setKeyboard(bool on);           // the selected note while the sidebar has the keyboard: drawn stronger
+    void setKeyboard(bool on);           // the selected note while the sidebar has the keyboard: tinted
     void setLit(bool on);                // its marking is selected, or the pointer is on either
     bool isLit() const { return editing_ || lit_; }      // shows the colour of its marking
     void fitWidth(int w);                // also sets the height: grows with the note, a long one scrolls

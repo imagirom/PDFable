@@ -49,7 +49,7 @@ colour.*
   to delete. A click on a note beside its text selects it: where notes pile up, the selected one moves to
   the height of its marking and the others make room. Up and Down then go from note to note, Del
   removes the selected note (not its marking), Esc returns to the page. Enter opens the note of whatever is selected, in the sidebar or on the page. While the sidebar has the
-  keyboard, the selected note is drawn with a stronger outline.
+  keyboard, the selected note is tinted in the colour of its marking, and so is the note being written.
   Click a marking to select it (Del removes it); double-click it, or tap it twice with the pen, to write
   or edit its note.
   The lines are grey; a note shows the colour of its marking, on its line and around the marking, while

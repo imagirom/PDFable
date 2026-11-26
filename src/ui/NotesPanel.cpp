@@ -146,10 +146,17 @@ void NoteCard::paintEvent(QPaintEvent *)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-    // Del and the arrow keys act on the notes while the sidebar has the keyboard, and on the page otherwise:
-    // the selected note shows which, with a stronger outline
-    p.setPen(QPen(isLit() ? noteLineColor(note_.color) : palette().color(QPalette::Mid), keyboard_ ? 2.5 : isLit() ? 1.5 : 1));
-    p.setBrush(palette().color(QPalette::Base));
+    p.setPen(QPen(isLit() ? noteLineColor(note_.color) : palette().color(QPalette::Mid), isLit() ? 1.5 : 1));
+    // Del and the arrow keys act on the notes while the sidebar has the keyboard, and on the page otherwise: the
+    // note the keyboard acts on shows it with a tint of its marking's colour. So does the note being written,
+    // whose text cursor alone is easy to miss.
+    QColor bg = palette().color(QPalette::Base);
+    if (keyboard_ || editing_) {
+        const qreal t = bg.lightness() < 128 ? 0.18 : 0.24;     // less on a dark card, where yellow soon turns olive
+        bg = QColor::fromRgbF(bg.redF() + (note_.color.redF() - bg.redF()) * t, bg.greenF() + (note_.color.greenF() - bg.greenF()) * t,
+                              bg.blueF() + (note_.color.blueF() - bg.blueF()) * t);
+    }
+    p.setBrush(bg);
     p.drawRoundedRect(r, 7, 7);
     p.setPen(Qt::NoPen);
     p.setBrush(note_.color);

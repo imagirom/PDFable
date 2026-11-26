@@ -200,7 +200,7 @@ private:
     void layoutTextEdit();
     void pollPreview();
     void runSearchChunk();
-    void searchPage(int page);
+    bool searchPage(int page);     // false: it was searched already
     void searchInView();
     void pushHistory();
 

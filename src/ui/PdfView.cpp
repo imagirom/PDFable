@@ -1810,9 +1810,17 @@ void PdfView::startRectPick(std::function<void(int, QRectF)> cb, const QString &
 // ------------------------------------------------------------------ search
 void PdfView::setSearch(const QString &text)
 {
+    // A term that contains the previous one can only be found on pages where that one was found. While a term
+    // is typed letter by letter, the pages already searched without a hit therefore need no second look, and on
+    // a long document a keystroke soon searches a few pages instead of all. (Exact containment: MuPDF ignores
+    // case for ASCII letters only.)
+    QSet<int> without;
+    if (!needle_.isEmpty() && text.contains(needle_))
+        for (int pg : std::as_const(searched_))
+            if (!hits_.contains(pg)) without.insert(pg);
     needle_ = text;
     hits_.clear();
-    searched_.clear();
+    searched_ = without;
     searchTotal_ = 0;
     searchStart_ = currentPage();
     searchNext_ = 0;
@@ -1828,14 +1836,15 @@ void PdfView::setSearch(const QString &text)
     viewport()->update();
 }
 
-void PdfView::searchPage(int page)
+bool PdfView::searchPage(int page)
 {
-    if (searched_.contains(page)) return;
+    if (searched_.contains(page)) return false;
     searched_.insert(page);
     QVector<QPolygonF> h = doc_->search(page, needle_);
-    if (h.isEmpty()) return;
+    if (h.isEmpty()) return true;
     searchTotal_ += h.size();
     hits_.insert(page, h);
+    return true;
 }
 
 void PdfView::searchInView()
@@ -1853,9 +1862,9 @@ void PdfView::runSearchChunk()
     // Walk from the page the search started on and wrap round at the end, so the first hit met is the first one
     // at or after that page, or failing that the first in the document; that is where the view jumps.
     int n = doc_->pageCount();
-    for (int k = 0; k < 6 && searchNext_ < n; ++k, ++searchNext_) {
+    for (int k = 0; k < 6 && searchNext_ < n; ++searchNext_) {      // six pages really searched: skipped ones cost nothing
         int pg = (searchStart_ + searchNext_) % n;
-        searchPage(pg);
+        if (searchPage(pg)) ++k;
         auto h = hits_.constFind(pg);
         if (hitPage_ < 0 && h != hits_.constEnd()) {
             hitPage_ = pg;

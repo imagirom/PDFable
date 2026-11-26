@@ -242,6 +242,19 @@ int main(int argc, char **argv)
         for (int i = 0; i < total && back; ++i) { o = (o + total - 2) % total + 1; back = seen[total + i] == o; }
         CHECK(fwd);
         CHECK(back);
+        // typing on: a longer term is only looked for where the shorter one was found, and must find what a
+        // fresh search of the whole document finds; a shorter or different term starts from scratch
+        auto everywhere = [&](const QString &t) {
+            int n = 0;
+            for (int p = 0; p < d->pageCount(); ++p) n += d->search(p, t).size();
+            return n;
+        };
+        bool same = true;
+        for (const QString &t : {QString("Line 17"), QString("Line 17 of page 2"), QString("Line 17 of page 2."), QString("Line 17"), QString("kinetic")}) {
+            v->setSearch(t);
+            same = same && finish() && v->searchCount() == everywhere(t);
+        }
+        CHECK(same && everywhere("Line 17 of page 2") > 0 && everywhere("Line 17 of page 2") < everywhere("Line 17"));
         v->setSearch(QString());
     }
 

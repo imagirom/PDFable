@@ -668,6 +668,37 @@ int main(int argc, char **argv)
             nv->gotoPage(1, 100, false);
             wait(200);
         }
+        // Down goes through the notes in the order their cards are stacked in, also where two notes sit on one text
+        // line and the right one was made first
+        {
+            const int right = nd->addMarkup(1, AnnotKind::Highlight, {QPolygonF(QRectF(260, 322, 70, 12))}, QColor(140, 235, 130));
+            nd->setAnnotContents(1, right, "Right half of the line.");
+            const int left = nd->addMarkup(1, AnnotKind::Highlight, {QPolygonF(QRectF(80, 322, 70, 12))}, QColor(255, 235, 60));
+            nd->setAnnotContents(1, left, "Left half of the line.");
+            wait(400);
+            QPointF off = nv->pageToView(1, QPointF(40, 600));
+            nv->testPointer(0, off, -1, 36000);               // nothing selected: the cards are where they are by default
+            nv->testPointer(2, off, -1, 36010);
+            wait(200);
+            QVector<int> stacked = {id, id2, left, right};
+            std::sort(stacked.begin(), stacked.end(), [&](int a, int b) { return np->card(a)->y() < np->card(b)->y(); });
+            QVector<int> walked;
+            np->setFocus();
+            QKeyEvent down(QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier);
+            for (int i = 0; i < 4; ++i) {
+                QApplication::sendEvent(np, &down);
+                wait(200);
+                for (int n : {id, id2, left, right})
+                    if (np->card(n)->isLit()) walked.push_back(n);
+            }
+            std::printf("     stacked %d %d %d %d, walked %d %d %d %d (left %d, right %d)\n", stacked[0], stacked[1], stacked[2], stacked[3],
+                        walked.value(0), walked.value(1), walked.value(2), walked.value(3), left, right);
+            CHECK(walked == stacked && stacked.indexOf(left) + 1 == stacked.indexOf(right));
+            nv->testPointer(0, off, -1, 37000);
+            nv->testPointer(2, off, -1, 37010);
+            nd->removeAnnots(1, {left, right});
+            wait(400);
+        }
         PdfView::setNoteAfterMarking(true);
     }
 

@@ -382,6 +382,14 @@ void NotesPanel::reload()
         } else if (!c->isEditing())
             c->setNote(m);
     }
+    // One order for everything: the cards are stacked in it and the arrow keys walk it. Reading order, by page,
+    // then by height, then from the left. (Sorting the cards by their rounded pixel height instead let two notes
+    // on one text line come out in another order than the keys took them in.)
+    std::sort(notes_.begin(), notes_.end(), [this](const MarkupNote &a, const MarkupNote &b) {
+        if (a.page != b.page) return a.page < b.page;
+        const qreal ya = lineYOf(a), yb = lineYOf(b);
+        return ya != yb ? ya < yb : a.anchor.x() != b.anchor.x() ? a.anchor.x() < b.anchor.x() : a.id < b.id;
+    });
     for (auto it = cards_.begin(); it != cards_.end();) {
         if (!keep.contains(it.key()) && !it.value()->isEditing()) {
             sliding_.remove(it.value());
@@ -445,7 +453,6 @@ void NotesPanel::relayout()
             if (y < yBelow) { yBelow = y; belowId_ = m.id; }
         }
     }
-    std::sort(items.begin(), items.end(), [](const Item &a, const Item &b) { return a.y < b.y; });
     QVector<qreal> want;
     QVector<int> heights;
     int pinned = -1;        // the note being written, else the selected one
@@ -512,12 +519,9 @@ void NotesPanel::goTo(const MarkupNote &n, bool always)
 // next note in the document, Enter opens the selected one, Del removes it, Esc goes back to the page.
 void NotesPanel::keyPressEvent(QKeyEvent *e)
 {
-    QVector<MarkupNote> order;
+    QVector<MarkupNote> order;      // notes_ is in reading order
     for (const MarkupNote &m : std::as_const(notes_))
         if (cards_.contains(m.id)) order.push_back(m);
-    std::sort(order.begin(), order.end(), [this](const MarkupNote &a, const MarkupNote &b) {
-        return a.page != b.page ? a.page < b.page : lineYOf(a) != lineYOf(b) ? lineYOf(a) < lineYOf(b) : a.anchor.x() < b.anchor.x();
-    });
     int at = -1;
     for (int i = 0; i < order.size(); ++i)
         if (order[i].id == selectedId_) at = i;

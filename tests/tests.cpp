@@ -576,6 +576,23 @@ int main(int argc, char **argv)
             CHECK(np->noteCount() == 2);
             nv->testPointer(0, off, -1, 34000);           // back to the mouse
             nv->testPointer(2, off, -1, 34010);
+            // going from one marking to the other by clicks on the page selects the new one in one step, without
+            // nothing being selected in between (the Notes sidebar would lay its cards out twice)
+            {
+                QApplication::sendEvent(nv, &leave);      // the pen hovered over the first marking
+                QPointF first = nv->pageToView(1, QPointF(150, 258));
+                nv->testPointer(0, first, -1, 34600);
+                nv->testPointer(2, first, -1, 34610);
+                QVector<int> told;
+                auto conn = QObject::connect(nv, &PdfView::noteSelected, [&](int n) { told.push_back(n); });
+                nv->testPointer(0, on, -1, 34700);
+                nv->testPointer(2, on, -1, 34710);
+                QObject::disconnect(conn);
+                CHECK(told == QVector<int>({id2}));
+                nv->testPointer(0, off, -1, 34800);       // beside any marking: nothing selected
+                nv->testPointer(2, off, -1, 34810);
+                CHECK(!np->card(id)->isLit() && !np->card(id2)->isLit());
+            }
             // writing another note moves the selection to its marking
             QApplication::sendEvent(nv, &leave);          // the pen hovered over the first marking
             // undo and redo drop the selection in the view, and the sidebar must follow

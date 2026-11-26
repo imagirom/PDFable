@@ -1136,8 +1136,12 @@ void PdfView::press(const Ptr &e)
             selQuads_.clear();
             return;
         }
-        clearAnnotSelection();
-        if (const LinkInfo *l = linkAt(pg, pt)) {
+        // On a text marking the release decides: a click selects it. Dropping the selection here first would make
+        // the Notes sidebar lay its cards out twice, once for nothing selected and once for the new note.
+        const int mark = markupAt(pg, pt);
+        const LinkInfo *l = linkAt(pg, pt);
+        if (!mark || l) clearAnnotSelection();
+        if (l) {
             pressLink_ = *l;
             drag_ = Drag::LinkClick;
             return;
@@ -1147,7 +1151,7 @@ void PdfView::press(const Ptr &e)
         selA_ = selB_ = pt;
         selQuads_.clear();
         pressMarkupPage_ = pg;
-        pressMarkupId_ = markupAt(pg, pt);
+        pressMarkupId_ = mark;
         viewport()->update();
         break;
     }
@@ -1235,8 +1239,11 @@ void PdfView::release(const Ptr &e)
         if (selQuads_.isEmpty()) {
             selPage_ = -1;
             if (pressMarkupId_ && QLineF(pressPos_, e.pos).length() < 5 && !isPreview_) clickMarkup(pressMarkupPage_, pressMarkupId_, e);
-        } else
+            else clearAnnotSelection();
+        } else {
+            clearAnnotSelection();      // text was selected instead: the press on a marking had left the selection alone
             showSelBar(e.pos);
+        }
         pressMarkupId_ = 0;
         break;
     case Drag::AnnotMove:

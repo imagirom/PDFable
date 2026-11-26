@@ -281,6 +281,14 @@ int main(int argc, char **argv)
         for (int i = 0; i < 200 && v->currentPage() != 3; ++i) v->findNext(true);
         v->setSearch("Line 1 of");
         CHECK(finish() && v->currentPage() == 3);
+        // Esc in the search field closes the search, like its close button: the marks go, the page has the keyboard
+        tab->showSearch();
+        auto *field = tab->findChild<QLineEdit *>();
+        field->setText("kinetic");
+        CHECK(finish() && field->isVisible() && v->searchCount() > 0);
+        QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+        QApplication::sendEvent(field, &esc);
+        CHECK(!field->isVisible() && v->searchCount() == 0 && v->hasFocus());
         bool previous = false;                              // Shift+F3
         for (QAction *a : w->findChildren<QAction *>()) previous = previous || a->shortcut() == QKeySequence(QKeySequence::FindPrevious);
         CHECK(previous);

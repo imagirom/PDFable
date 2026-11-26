@@ -631,6 +631,22 @@ int main(int argc, char **argv)
                 CHECK(n2->isEditing() && n2->isLit() && !n1->isLit());
                 QApplication::sendEvent(n2->findChild<QPlainTextEdit *>(), &esc);
                 wait(100);
+                // a click on the text of another note while one is being written moves on to that note: it must not
+                // close both editors
+                auto typeInto = [&](NoteCard *c) {
+                    QWidget *tv = c->findChild<QPlainTextEdit *>()->viewport();
+                    QMouseEvent press(QEvent::MouseButtonPress, QPointF(5, 5), tv->mapToGlobal(QPointF(5, 5)), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                    QApplication::sendEvent(tv, &press);
+                    wait(200);
+                };
+                typeInto(n1);
+                CHECK(n1->isEditing() && !n2->isEditing());
+                typeInto(n2);
+                CHECK(n2->isEditing() && n2->findChild<QPlainTextEdit *>()->hasFocus() && !n1->isEditing());
+                typeInto(n1);
+                CHECK(n1->isEditing() && n1->findChild<QPlainTextEdit *>()->hasFocus() && !n2->isEditing());
+                QApplication::sendEvent(n1->findChild<QPlainTextEdit *>(), &esc);
+                wait(100);
                 // Del removes the selected note, not its marking, and the next note becomes the selected one
                 QApplication::sendEvent(n1, &click);
                 QKeyEvent remove(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);

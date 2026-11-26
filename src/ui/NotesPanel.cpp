@@ -211,7 +211,9 @@ void NoteCard::finish(bool keep)
     if (!editing_) return;
     QString text = edit_->toPlainText().trimmed();
     setEditing(false);
-    parentWidget()->setFocus();      // the sidebar: the arrow keys then go from note to note
+    // Finished with Esc or Ctrl+Enter: the keyboard goes to the sidebar, where the arrow keys go from note to
+    // note. Finished because the keyboard went elsewhere, perhaps to another note's text: leave it there.
+    if (edit_->hasFocus()) parentWidget()->setFocus();
     edit_->setPlainText(note_.text);
     fitWidth(width());
     if (keep && text != note_.text) emit committed(note_.page, note_.id, text);
@@ -467,7 +469,12 @@ void NotesPanel::relayout()
     const int pinnedId = pinned >= 0 ? items[pinned].c->note().id : 0;
     // short, and not at all where the system has animations switched off
     const int ms = qMin(120, style()->styleHint(QStyle::SH_Widget_Animation_Duration, nullptr, this));
-    const bool start = pinnedId != pinnedId_ && isVisible() && ms > 0;
+    // Slide when another note became the pinned one. If the goals change again while the cards are on their way
+    // (a card grew, the view moved), they set off anew from where they are, so that none jumps back.
+    bool retarget = false;
+    for (int i = 0; i < items.size() && !retarget; ++i)
+        retarget = sliding_.contains(items[i].c) && sliding_[items[i].c].second != int(tops[i]);
+    const bool start = (pinnedId != pinnedId_ || retarget) && isVisible() && ms > 0;
     pinnedId_ = pinnedId;
     if (start) sliding_.clear();
     for (int i = 0; i < items.size(); ++i) {
@@ -476,8 +483,7 @@ void NotesPanel::relayout()
         if (visible || it.c->isEditing()) {
             const int to = int(tops[i]);
             if (start && it.c->isVisible() && it.c->y() != to) sliding_.insert(it.c, {it.c->y(), to});
-            else if (sliding_.contains(it.c)) sliding_[it.c].second = to;        // on its way: only the goal moved
-            else it.c->move(kSide, to);
+            else if (!sliding_.contains(it.c)) it.c->move(kSide, to);
             it.c->show();
             placed_.push_back({it.y, it.c});
         } else {

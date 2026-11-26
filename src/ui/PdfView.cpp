@@ -1818,22 +1818,35 @@ void PdfView::setSearch(const QString &text)
     if (!needle_.isEmpty() && text.contains(needle_))
         for (int pg : std::as_const(searched_))
             if (!hits_.contains(pg)) without.insert(pg);
+    // The search starts where the reader was when the term was begun, and that place stays put while the term
+    // is extended or shortened: the current hit then only moves on when it stops matching, and comes back when
+    // letters are deleted, instead of the view wandering forward with every keystroke. A different term starts
+    // where the view is now.
+    if (needle_.isEmpty() || text.isEmpty() || !(text.contains(needle_) || needle_.contains(text))) searchAnchor_ = currentPos();
     needle_ = text;
     hits_.clear();
     searched_ = without;
     searchTotal_ = 0;
-    searchStart_ = currentPage();
     searchNext_ = 0;
     hitPage_ = hitIndex_ = -1;
     searchTimer_.stop();
     if (!text.isEmpty()) {
-        // Search the pages in view before the repaint, so their marks are replaced in the same frame and do not
-        // go blank on every keystroke until the background search gets round to them.
-        searchInView();
-        searchTimer_.start(0);
+        // The first step straight away, before the repaint: the marks on the pages in view are replaced in the
+        // same frame and do not go blank on every keystroke, and the current hit is usually found at once too.
+        runSearchChunk();
+        return;
     }
-    emit searchChanged(searchTotal_, 0);
+    emit searchChanged(0, 0);
     viewport()->update();
+}
+
+// Bring the current hit into view; if it is in view already, the view stays where it is.
+void PdfView::showHit()
+{
+    const QRectF hit = hits_[hitPage_][hitIndex_].boundingRect();
+    const QRectF r = toView(hitPage_, hit);
+    if (r.top() >= 20 && r.bottom() <= viewport()->height() - 20) return;
+    gotoPage(hitPage_, qMax(0.0, hit.top() - 80), false);
 }
 
 bool PdfView::searchPage(int page)
@@ -1859,22 +1872,34 @@ void PdfView::searchInView()
 
 void PdfView::runSearchChunk()
 {
-    // Walk from the page the search started on and wrap round at the end, so the first hit met is the first one
-    // at or after that page, or failing that the first in the document; that is where the view jumps.
+    searchInView();
+    // Walk from the page of the anchor and wrap round at the end: the first hit met is the first one at or after
+    // the anchor, which becomes the current hit.
     int n = doc_->pageCount();
     for (int k = 0; k < 6 && searchNext_ < n; ++searchNext_) {      // six pages really searched: skipped ones cost nothing
-        int pg = (searchStart_ + searchNext_) % n;
+        int pg = (searchAnchor_.first + searchNext_) % n;
         if (searchPage(pg)) ++k;
         auto h = hits_.constFind(pg);
-        if (hitPage_ < 0 && h != hits_.constEnd()) {
-            hitPage_ = pg;
+        if (hitPage_ >= 0 || h == hits_.constEnd()) continue;
+        int first = 0;      // on the anchor's own page, visited first, the hits above the anchor come last
+        while (searchNext_ == 0 && first < h->size() && h->at(first).boundingRect().bottom() < searchAnchor_.second) ++first;
+        if (first == h->size()) continue;
+        hitPage_ = pg;
+        hitIndex_ = first;
+        showHit();
+    }
+    if (searchNext_ < n) {
+        if (!searchTimer_.isActive()) searchTimer_.start(0);
+    } else {
+        searchTimer_.stop();
+        if (hitPage_ < 0 && hits_.contains(searchAnchor_.first)) {      // only hits above the anchor on its own page: wrapped round
+            hitPage_ = searchAnchor_.first;
             hitIndex_ = 0;
-            gotoPage(hitPage_, qMax(0.0, h->at(0).boundingRect().top() - 80), false);
+            showHit();
         }
     }
     // The jump, or the reader scrolling meanwhile, can bring pages into view that the walk has not reached yet.
     searchInView();
-    if (searchNext_ >= n) searchTimer_.stop();
     emit searchChanged(searchTotal_, 0);
     viewport()->update();
 }
@@ -1894,7 +1919,8 @@ void PdfView::findNext(bool forward)
         else if (hitIndex_ < 0) { pi = (pi + pages.size() - 1) % pages.size(); hitIndex_ = hits_[pages[pi]].size() - 1; }
     }
     hitPage_ = pages[pi];
-    gotoPage(hitPage_, qMax(0.0, hits_[hitPage_][hitIndex_].boundingRect().top() - 80), false);
+    showHit();
+    searchAnchor_ = {hitPage_, hits_[hitPage_][hitIndex_].boundingRect().top()};     // typing on continues from this hit
     int ordinal = hitIndex_ + 1;
     for (int i = 0; i < pi; ++i) ordinal += hits_[pages[i]].size();
     emit searchChanged(searchTotal_, ordinal);

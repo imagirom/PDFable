@@ -175,30 +175,27 @@ int main(int argc, char **argv)
         v->gotoPage(2, 300, false);
         wait(500);
         const int cur = v->currentPage();
-        const QRect area = visible(cur);
-        const QPoint topA = v->pageToView(cur, {0, 0}).toPoint();
-        CHECK(marks(grab(), area) == 0);
+        CHECK(marks(grab(), visible(cur)) == 0);
         v->setSearch(term);
         const int early = v->searchCount();
         const QImage first = grab();
+        const QRect area = visible(cur);                   // the first hit may have been cut off at the top: the view moved to show it
+        const QPoint topA = v->pageToView(cur, {0, 0}).toPoint();
         std::printf("     right after setSearch: %d hits, %d marked pixels on page %d\n", early, marks(first, area), cur + 1);
         CHECK(early > 0);
         CHECK(marks(first, area) > 0);
         CHECK(finish());
-        // Once finished, the view has jumped to the first hit and drawn it orange: compare the part of the page that is
-        // in view in both grabs, in page pixels, leaving out that hit.
+        // The current hit is found and drawn orange in that first frame already: once the search has finished, the
+        // part of the page in view must look the same.
         const QImage done = grab();
         const QPoint topB = v->pageToView(cur, {0, 0}).toPoint();
         const QRect both = area.translated(-topA).intersected(visible(cur).translated(-topB));
-        const QRectF h0 = d->search(cur, term).value(0).boundingRect();
-        const QRect hit = QRectF(v->pageToView(cur, h0.topLeft()), v->pageToView(cur, h0.bottomRight())).toAlignedRect().translated(-topB).adjusted(-3, -3, 3, 3);
         int compared = 0, differ = 0;
         for (int y = both.top(); y <= both.bottom(); ++y)
-            for (int x = both.left(); x <= both.right(); ++x)
-                if (!hit.contains(x, y)) {
-                    ++compared;
-                    differ += first.pixel(QPoint(x, y) + topA) != done.pixel(QPoint(x, y) + topB);
-                }
+            for (int x = both.left(); x <= both.right(); ++x) {
+                ++compared;
+                differ += first.pixel(QPoint(x, y) + topA) != done.pixel(QPoint(x, y) + topB);
+            }
         std::printf("     compared %d page pixels (%d marked), %d differ\n", compared, marks(done, both.translated(topB)), differ);
         CHECK(compared > 10000 && marks(done, both.translated(topB)) > 1000 && differ == 0);
 
@@ -221,16 +218,23 @@ int main(int argc, char **argv)
         std::printf("     %d hits, the pages hold %d\n", v->searchCount(), total);
         CHECK(v->searchCount() == total);
 
-        // Started further down, the view jumps to the first hit at or after the page in view (wrapping round), and
+        // Started further down, the current hit is the first one at or after the top of the view (wrapping round), and
         // findNext goes from there through every hit once in each direction and comes back to it.
         v->setSearch(QString());
         v->gotoPage(4, 200, false);
-        int q = v->currentPage();
+        const ViewState from = v->viewState();
         v->setSearch(term);
         CHECK(finish());
-        while (perPage[q % perPage.size()] == 0) ++q;
-        int ordinal0 = 1;
-        for (int p = 0; p < q % perPage.size(); ++p) ordinal0 += perPage[p];
+        int ordinal0 = 0;
+        for (int step = 0; step <= d->pageCount() && !ordinal0; ++step) {
+            const int p = (from.page + step) % d->pageCount();
+            const QVector<QPolygonF> hs = d->search(p, term);
+            int first = 0;
+            while (step == 0 && first < hs.size() && hs[first].boundingRect().bottom() < from.y) ++first;
+            if (first == hs.size()) continue;
+            ordinal0 = first + 1;
+            for (int b = 0; b < p; ++b) ordinal0 += perPage[b];
+        }
         QVector<int> seen;
         auto conn = QObject::connect(v, &PdfView::searchChanged, [&](int, int c) { seen.push_back(c); });
         for (int i = 0; i < total; ++i) v->findNext(true);
@@ -255,6 +259,31 @@ int main(int argc, char **argv)
             same = same && finish() && v->searchCount() == everywhere(t);
         }
         CHECK(same && everywhere("Line 17 of page 2") > 0 && everywhere("Line 17 of page 2") < everywhere("Line 17"));
+        // While a term is typed, the search starts from where it began: the view stays put as long as the current
+        // hit is in view,
+        v->setSearch(QString());
+        v->gotoPage(1, 0, false);
+        const int rest = v->verticalScrollBar()->value();
+        bool still = true;
+        for (const QString &t : {QString("Line"), QString("Line 1"), QString("Line 1 of page 2")}) {
+            v->setSearch(t);
+            still = still && finish() && v->verticalScrollBar()->value() == rest;
+        }
+        CHECK(still);
+        // moves on when the term only matches further down, and comes back when letters are deleted again
+        v->setSearch("Line 1 of page 4");
+        CHECK(finish() && v->currentPage() == 3);
+        v->setSearch("Line 1 of page");
+        CHECK(finish() && v->currentPage() == 1);
+        // "find next" moves the starting point: typing on continues from that hit instead of jumping back
+        v->setSearch("Line 1");
+        CHECK(finish() && v->currentPage() == 1);
+        for (int i = 0; i < 200 && v->currentPage() != 3; ++i) v->findNext(true);
+        v->setSearch("Line 1 of");
+        CHECK(finish() && v->currentPage() == 3);
+        bool previous = false;                              // Shift+F3
+        for (QAction *a : w->findChildren<QAction *>()) previous = previous || a->shortcut() == QKeySequence(QKeySequence::FindPrevious);
+        CHECK(previous);
         v->setSearch(QString());
     }
 

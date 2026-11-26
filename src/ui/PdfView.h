@@ -201,6 +201,7 @@ private:
     void pollPreview();
     void runSearchChunk();
     bool searchPage(int page);     // false: it was searched already
+    void showHit();
     void searchInView();
     void pushHistory();
 
@@ -313,7 +314,8 @@ private:
     QString needle_;
     QHash<int, QVector<QPolygonF>> hits_;
     QSet<int> searched_;   // pages searched for needle_ so far; those in view are searched out of turn
-    int searchStart_ = 0, searchNext_ = 0, searchTotal_ = 0, hitPage_ = -1, hitIndex_ = -1;
+    QPair<int, double> searchAnchor_{0, 0};      // page and height where the search for the current term starts
+    int searchNext_ = 0, searchTotal_ = 0, hitPage_ = -1, hitIndex_ = -1;
     QTimer searchTimer_;
 
     // history
